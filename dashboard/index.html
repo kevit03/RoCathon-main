@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Atlas Brief | Creator Match Intelligence</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero reveal">
+        <div class="hero-copy">
+          <p class="eyebrow">Atlas Brief</p>
+          <h1>Creator Match Intelligence</h1>
+          <p class="hero-summary">
+            Executive presentation view for the RoC hybrid creator ranking engine.
+          </p>
+        </div>
+        <div class="hero-meta">
+          <div class="meta-card">
+            <span class="meta-label">Brand Profile</span>
+            <strong id="brandProfile">Loading...</strong>
+          </div>
+          <div class="meta-card">
+            <span class="meta-label">Search Query</span>
+            <strong id="queryText">Loading...</strong>
+          </div>
+          <div class="meta-card">
+            <span class="meta-label">Generated</span>
+            <strong id="generatedAt">Loading...</strong>
+          </div>
+        </div>
+      </header>
+
+      <main>
+        <section class="metric-grid reveal" id="metricGrid"></section>
+
+        <section class="executive-layout">
+          <article class="feature-card reveal" id="featuredCandidate"></article>
+          <aside class="method-card reveal">
+            <p class="eyebrow">Scoring Model</p>
+            <h2>Convex Fusion</h2>
+            <p class="method-copy">
+              Semantic relevance is fused with RoC&apos;s projected commercial score using a
+              brand-aware convex combination. This keeps the ranking explainable while
+              preserving score magnitude.
+            </p>
+            <div class="formula-block">
+              <span>projected_normalized = (projected_score - 60) / 40</span>
+              <span>final_score = 100 * (alpha * semantic_score + (1 - alpha) * projected_normalized)</span>
+            </div>
+            <div class="pill-row" id="methodPills"></div>
+          </aside>
+        </section>
+
+        <section class="insight-layout">
+          <article class="panel reveal">
+            <div class="panel-head">
+              <p class="eyebrow">Executive Readout</p>
+              <h2>What The Ranking Says</h2>
+            </div>
+            <div class="insight-list" id="insightList"></div>
+          </article>
+
+          <article class="panel reveal">
+            <div class="panel-head">
+              <p class="eyebrow">Market Shape</p>
+              <h2>Top Signal Distribution</h2>
+            </div>
+            <div class="distribution-list" id="distributionList"></div>
+          </article>
+        </section>
+
+        <section class="panel reveal">
+          <div class="panel-head">
+            <p class="eyebrow">Ranked Candidates</p>
+            <h2>Top 10 Recommendation Set</h2>
+          </div>
+          <div class="rank-list" id="rankList"></div>
+        </section>
+      </main>
+    </div>
+
+    <template id="metricTemplate">
+      <article class="metric-card">
+        <span class="metric-label"></span>
+        <strong class="metric-value"></strong>
+        <p class="metric-subtext"></p>
+      </article>
+    </template>
+
+    <script src="/app.js" defer></script>
+  </body>
+</html>

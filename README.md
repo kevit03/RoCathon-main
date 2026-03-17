@@ -1,43 +1,119 @@
-# RoC Hackathon — Semantic Projected Score Engine
+# RoC Hackathon - Semantic Projected Score Engine
 
-## The Problem
+This submission implements a hybrid creator search pipeline that balances:
 
-Brands search for creators with rigid filters (age bracket, category tag).
-That misses the creative context. A brand selling rugged phone cases might
-want a creator who does extreme outdoor stunts — irrelevant of their category.
+- semantic relevance from embeddings
+- commercial viability from RoC's `projected_score`
 
-But pure semantic AI search is dangerous in commerce: it might surface the
-perfect stylistic match with $0 sales history. Brands need ROI, not just vibe.
+The result is a ranker that can surface creators who are both contextually aligned with a query and likely to convert.
 
-## Your Mission
+## Architecture
 
-Build `searchCreators(query, brandProfile)` — a hybrid search function that:
+The project is split into four layers:
 
-- Takes a natural language query and a brand profile as input
-- Returns a ranked list of creators who are both **semantically relevant** and **commercially viable**
-- Exposes `semantic_score`, `projected_score`, and `final_score` per creator
+1. `creators.json`
+   Raw creator dataset with bios, content tags, performance metrics, and RoC-provided `projected_score`.
 
-## What's Given
+2. `scripts/ingest.ts`
+   Reads creators, builds searchable text, generates embeddings, and stores them in Postgres with `pgvector`.
 
-- `creators.json` — 200 mock creators with bios, content tags, metrics, and a `projected_score` (60–100) pre-computed by RoC
-- `src/types.ts` — TypeScript interfaces for Creator, BrandProfile, and RankedCreator
-- `src/searchCreators.ts` — function skeleton to implement
+3. `src/searchCreators.ts`
+   Embeds the incoming query + brand profile, retrieves semantic candidates from the vector store, and reranks them with a convex-combination hybrid scoring formula.
 
-## What You Build
+4. `scripts/demo.ts`
+   Runs the required challenge query and writes the top results to `output/brand_smart_home_top10.json`.
 
-Everything else:
-- Your vector DB setup (use [Supabase free tier](https://supabase.com) or local Docker + pgvector)
-- Your ingestion script to embed and store creators
-- Your `searchCreators` implementation
-- Your hybrid scoring formula
+## Retrieval + Ranking Design
+
+### Search document used for each creator
+
+Each creator is embedded using a single searchable document composed from:
+
+- username
+- bio
+- content tags
+- follower count
+- 30-day GMV
+- 30-day average views
+- engagement rate
+- GPM
+- audience gender
+- audience age ranges
+
+This keeps the vector representation grounded in both style and commercial context.
+
+### Query document
+
+The search query is expanded with the brand profile:
+
+- raw natural-language query
+- brand industries
+- target audience gender
+- target audience age ranges
+- brand GMV
+
+That means semantic retrieval is aware of the business context before reranking starts.
+
+### Hybrid scoring formula
+
+For the top semantic candidates, the final score is:
+
+```text
+projected_normalized = (projected_score - 60) / 40
+
+final_score =
+  100 * (
+    alpha * semantic_score +
+    (1 - alpha) * projected_normalized
+  )
+```
+
+This follows the standard convex-combination fusion pattern for hybrid retrieval. In this implementation, `alpha` is derived from the `brandProfile` to slightly shift the balance between semantic discovery and commercial conservatism:
+
+- `semantic_score`
+  Cosine similarity between the query embedding and the creator embedding.
+
+- `projected_normalized`
+  RoC's `projected_score` normalized from the provided `60-100` range to `0-1`.
+
+- `alpha`
+  A brand-aware fusion weight clamped to `[0.55, 0.80]`.
+
+It is computed from:
+
+- brand GMV: higher GMV brands lean slightly more toward commercial conservatism
+- industry breadth: multi-industry brands lean slightly more toward semantic exploration
+- audience breadth: broader target-age coverage leans slightly more toward semantic exploration
+
+This keeps the final score academically clean while still letting the brand profile influence retrieval behavior.
+
+## Vector Database Schema
+
+The schema lives in `sql/schema.sql`.
+
+```sql
+CREATE EXTENSION IF NOT EXISTS vector;
+
+CREATE TABLE IF NOT EXISTS creators (
+  username TEXT PRIMARY KEY,
+  bio TEXT NOT NULL,
+  content_style_tags TEXT[] NOT NULL,
+  projected_score INTEGER NOT NULL,
+  metrics JSONB NOT NULL,
+  search_document TEXT NOT NULL,
+  embedding vector(1536) NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+Similarity search uses `pgvector` cosine distance and an IVFFlat index.
 
 ## Setup
 
-### 1. Clone + install
+### 1. Install
 
 ```bash
-git clone <your-fork>
-cd roc-hackathon
 npm install
 ```
 
@@ -45,42 +121,103 @@ npm install
 
 ```bash
 cp .env.example .env
-# Fill in OPENAI_API_KEY and DATABASE_URL
 ```
 
-### 3. Set up your vector DB
+Then set:
 
-Option A — Supabase (recommended, no Docker):
-- Create a free project at supabase.com
-- Enable the `pgvector` extension: SQL Editor → `CREATE EXTENSION IF NOT EXISTS vector;`
-- Copy the connection string to `DATABASE_URL`
+- `OPENAI_API_KEY`
+- `DATABASE_URL`
 
-Option B — Local Docker:
-- Requires Docker installed
-- Set up your own `docker-compose.yml` with `pgvector/pgvector:pg15`
+Recommended submission settings:
 
-### 4. Create your schema
+```env
+EMBEDDING_PROVIDER=openai
+VECTOR_BACKEND=postgres
+```
 
-Design your own table schema. At minimum you'll need a `vector` column for embeddings.
+### 3. Enable `pgvector`
 
-### 5. Ingest creators
+Use either:
+
+- Supabase Postgres with `CREATE EXTENSION IF NOT EXISTS vector;`
+- local Postgres/Docker with `pgvector`
+
+### 4. Ingest creators
 
 ```bash
 npm run ingest
 ```
 
-### 6. Run demo
+This will:
+
+- create the schema if needed
+- generate embeddings for all creators
+- upsert them into the `creators` table
+
+### 5. Run the challenge demo
 
 ```bash
 npm run demo
 ```
 
-## Deliverables
+This runs the required query:
 
-Submit a Git repo with:
+```text
+Affordable home decor for small apartments
+```
 
-- [ ] `README.md` with setup instructions
-- [ ] DB schema + ingest instructions
-- [ ] `src/searchCreators.ts` implementation
-- [ ] Output JSON: top 10 results for query `"Affordable home decor for small apartments"` using the `brand_smart_home` profile
-- [ ] 2-minute Loom walkthrough
+against the `brand_smart_home` profile and writes:
+
+```text
+output/brand_smart_home_top10.json
+```
+
+## Local Fallback Mode
+
+For local development without Postgres, the project also supports:
+
+```env
+EMBEDDING_PROVIDER=local
+VECTOR_BACKEND=memory
+```
+
+This uses a deterministic hashed embedding fallback and in-memory cosine search. It is convenient for smoke testing, but the intended submission path is still `OpenAI + Postgres/pgvector`.
+
+## Commands
+
+```bash
+npm run typecheck
+npm run ingest
+npm run demo
+npm run dashboard
+```
+
+Optional demo flags:
+
+```bash
+npm run demo -- --brand brand_smart_home --top 10
+```
+
+To present the results in the executive dashboard:
+
+```bash
+npm run dashboard
+```
+
+Then open `http://localhost:4173`.
+
+## Files of Interest
+
+- `src/searchCreators.ts` - hybrid retrieval and convex-combination reranking
+- `src/embeddings.ts` - OpenAI + local embedding providers
+- `src/vectorStore.ts` - Postgres/pgvector and in-memory search backends
+- `src/brandProfiles.ts` - brand profile fixtures including `brand_smart_home`
+- `scripts/ingest.ts` - ingestion pipeline
+- `scripts/demo.ts` - reproducible demo runner
+- `scripts/dashboard.ts` - lightweight local server for the executive presentation UI
+- `sql/schema.sql` - database schema
+- `dashboard/` - Atlas Brief presentation layer
+
+## Notes
+
+- The local embedding path exists for reproducibility, but OpenAI embeddings are the highest-accuracy option available in this implementation.

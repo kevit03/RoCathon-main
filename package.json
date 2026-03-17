@@ -2,8 +2,11 @@
   "name": "roc-hackathon",
   "version": "1.0.0",
   "scripts": {
+    "build": "tsc --pretty false",
+    "typecheck": "tsc --noEmit --pretty false",
     "ingest": "npx ts-node scripts/ingest.ts",
-    "demo":   "npx ts-node scripts/demo.ts"
+    "demo":   "npx ts-node scripts/demo.ts",
+    "dashboard": "npx ts-node scripts/dashboard.ts"
   },
   "dependencies": {
     "openai": "^4.0.0",
