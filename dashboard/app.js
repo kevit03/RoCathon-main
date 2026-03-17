@@ -439,7 +439,7 @@ function scoreDistributionMarkup(view, expanded = false) {
   const innerWidth = width - margin.left - margin.right;
   const innerHeight = height - margin.top - margin.bottom;
   const sorted = [...values].sort((a, b) => b - a);
-  const reduced = bucketValues(sorted, state.curveBins);
+  const reduced = bucketValues(sorted, state.chartDetail);
   const minValue = Math.min(...reduced);
   const maxValue = Math.max(...reduced);
   const paddedMin = Math.max(0, minValue - 4);
@@ -469,7 +469,7 @@ function scoreDistributionMarkup(view, expanded = false) {
   ];
 
   return `
-    <svg class="chart-svg ${expanded ? "expanded" : ""}" viewBox="0 0 ${width} ${height}" role="img" aria-label="Universe score curve">
+    <svg class="chart-svg ${expanded ? "expanded" : ""}" viewBox="0 0 ${width} ${height}" style="height:${height}px" role="img" aria-label="Universe score curve">
       <line x1="${margin.left}" y1="${margin.top + innerHeight}" x2="${width - margin.right}" y2="${margin.top + innerHeight}" stroke="#d6dce6"></line>
       <line x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${margin.top + innerHeight}" stroke="#d6dce6"></line>
       ${ticks
@@ -496,7 +496,7 @@ function scoreDistributionMarkup(view, expanded = false) {
       <text class="chart-label" x="${margin.left}" y="${height - 6}">Highest ranked</text>
       <text class="chart-label" x="${width - margin.right - 68}" y="${height - 6}">Long tail</text>
     </svg>
-    <div class="chart-note">Resolution: ${state.curveBins} buckets. Drag the slider to compress or expand the score curve.</div>
+    <div class="chart-note">Detail ${state.chartDetail} · hover to enlarge, click to pin.</div>
   `;
 }
 
@@ -506,7 +506,7 @@ function renderScoreDistribution(view) {
 }
 
 function scatterPlotMarkup(view, expanded = false) {
-  const creators = scatterWindowCreators(view.universe.all);
+  const creators = chartWindowCreators(view.universe.all);
 
   if (creators.length === 0) {
     return "<p class='detail-copy'>No data available.</p>";
@@ -550,7 +550,7 @@ function scatterPlotMarkup(view, expanded = false) {
     .join("");
 
   return `
-    <svg class="chart-svg ${expanded ? "expanded" : ""}" viewBox="0 0 ${width} ${height}" role="img" aria-label="Reach versus GMV">
+    <svg class="chart-svg ${expanded ? "expanded" : ""}" viewBox="0 0 ${width} ${height}" style="height:${height}px" role="img" aria-label="Reach versus GMV">
       <line x1="${margin.left}" y1="${margin.top + innerHeight}" x2="${width - margin.right}" y2="${margin.top + innerHeight}" stroke="#d6dce6"></line>
       <line x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${margin.top + innerHeight}" stroke="#d6dce6"></line>
       <line x1="${margin.left + innerWidth / 2}" y1="${margin.top}" x2="${margin.left + innerWidth / 2}" y2="${margin.top + innerHeight}" stroke="#eef2f6"></line>
@@ -560,7 +560,7 @@ function scatterPlotMarkup(view, expanded = false) {
       ${circles}
       ${labels}
     </svg>
-    <div class="chart-note">Zoom: ${state.scatterZoom}%. Move the slider right to inspect the top of the ranked universe more closely.</div>
+    <div class="chart-note">Detail ${state.chartDetail} · hover to enlarge, click to pin.</div>
   `;
 }
 
@@ -595,22 +595,18 @@ function renderIndustryMix(view) {
     });
 }
 
-function renderEfficiencyPlot(view) {
-  const container = document.getElementById("efficiencyPlot");
-  if (!container) {
-    return;
-  }
-
-  const creators = view.universe.all;
+function efficiencyPlotMarkup(view, expanded = false) {
+  const creators = chartWindowCreators(view.universe.all);
 
   if (creators.length === 0) {
-    container.innerHTML = "<p class='detail-copy'>No data available.</p>";
-    return;
+    return "<p class='detail-copy'>No data available.</p>";
   }
 
-  const width = 700;
-  const height = 240;
-  const margin = { top: 18, right: 18, bottom: 30, left: 42 };
+  const width = expanded ? 1040 : 700;
+  const height = expanded ? 540 : 240;
+  const margin = expanded
+    ? { top: 22, right: 26, bottom: 40, left: 56 }
+    : { top: 18, right: 18, bottom: 30, left: 42 };
   const innerWidth = width - margin.left - margin.right;
   const innerHeight = height - margin.top - margin.bottom;
   const maxEngagement = Math.max(...creators.map((creator) => creator.metrics.engagement_rate), 0.001);
@@ -638,8 +634,8 @@ function renderEfficiencyPlot(view) {
     })
     .join("");
 
-  container.innerHTML = `
-    <svg class="chart-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Projected score versus engagement">
+  return `
+    <svg class="chart-svg ${expanded ? "expanded" : ""}" viewBox="0 0 ${width} ${height}" style="height:${height}px" role="img" aria-label="Projected score versus engagement">
       <line x1="${margin.left}" y1="${margin.top + innerHeight}" x2="${width - margin.right}" y2="${margin.top + innerHeight}" stroke="#d6dce6"></line>
       <line x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${margin.top + innerHeight}" stroke="#d6dce6"></line>
       <line x1="${margin.left + innerWidth / 2}" y1="${margin.top}" x2="${margin.left + innerWidth / 2}" y2="${margin.top + innerHeight}" stroke="#eef2f6"></line>
@@ -649,29 +645,34 @@ function renderEfficiencyPlot(view) {
       ${points}
       ${annotations}
     </svg>
-    <div class="chart-note">Projected score on the x-axis, engagement on the y-axis. This highlights creators who are strong on both quality and commercial expectation.</div>
+    <div class="chart-note">Detail ${state.chartDetail} · hover to enlarge, click to pin.</div>
   `;
 }
 
-function renderAudienceFitChart(view) {
-  const container = document.getElementById("audienceFitChart");
+function renderEfficiencyPlot(view) {
+  const container = document.getElementById("efficiencyPlot");
   if (!container) {
     return;
   }
 
+  container.innerHTML = efficiencyPlotMarkup(view, false);
+}
+
+function audienceFitChartMarkup(view, expanded = false) {
   const creators = [...view.universe.top]
     .sort((left, right) => right.diagnostics.audienceFit - left.diagnostics.audienceFit)
-    .slice(0, 8);
+    .slice(0, Math.max(4, Math.round(4 + chartDetailRatio() * 6)));
 
   if (creators.length === 0) {
-    container.innerHTML = "<p class='detail-copy'>No data available.</p>";
-    return;
+    return "<p class='detail-copy'>No data available.</p>";
   }
 
-  const width = 700;
-  const rowHeight = 26;
-  const height = creators.length * rowHeight + 52;
-  const margin = { top: 14, right: 28, bottom: 18, left: 170 };
+  const width = expanded ? 1040 : 700;
+  const rowHeight = expanded ? 34 : 26;
+  const height = creators.length * rowHeight + (expanded ? 72 : 52);
+  const margin = expanded
+    ? { top: 18, right: 34, bottom: 20, left: 230 }
+    : { top: 14, right: 28, bottom: 18, left: 170 };
   const innerWidth = width - margin.left - margin.right;
 
   const bars = creators
@@ -687,12 +688,21 @@ function renderAudienceFitChart(view) {
     })
     .join("");
 
-  container.innerHTML = `
-    <svg class="chart-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Top audience fit">
+  return `
+    <svg class="chart-svg ${expanded ? "expanded" : ""}" viewBox="0 0 ${width} ${height}" style="height:${height}px" role="img" aria-label="Top audience fit">
       ${bars}
     </svg>
-    <div class="chart-note">Highest audience-fit creators in the active shortlist. This is useful when the brand demographic is narrow or highly intentional.</div>
+    <div class="chart-note">Detail ${state.chartDetail} · hover to enlarge, click to pin.</div>
   `;
+}
+
+function renderAudienceFitChart(view) {
+  const container = document.getElementById("audienceFitChart");
+  if (!container) {
+    return;
+  }
+
+  container.innerHTML = audienceFitChartMarkup(view, false);
 }
 
 function renderSummaryRail(view) {
@@ -934,14 +944,28 @@ function renderChartModal(view) {
 
   if (state.expandedChart === "curve") {
     label.textContent = "Expanded view";
-    title.textContent = "Universe score curve";
+    title.textContent = "Universe curve";
     body.innerHTML = scoreDistributionMarkup(view, true);
     return;
   }
 
+  if (state.expandedChart === "scatter") {
+    label.textContent = "Expanded view";
+    title.textContent = "Reach vs. GMV";
+    body.innerHTML = scatterPlotMarkup(view, true);
+    return;
+  }
+
+  if (state.expandedChart === "efficiency") {
+    label.textContent = "Expanded view";
+    title.textContent = "Projected vs. engagement";
+    body.innerHTML = efficiencyPlotMarkup(view, true);
+    return;
+  }
+
   label.textContent = "Expanded view";
-  title.textContent = "Reach vs. GMV";
-  body.innerHTML = scatterPlotMarkup(view, true);
+  title.textContent = "Top audience alignment";
+  body.innerHTML = audienceFitChartMarkup(view, true);
 }
 
 function attachEvents() {
@@ -968,24 +992,22 @@ function attachEvents() {
     render();
   });
 
-  document.getElementById("curveBins").addEventListener("input", (event) => {
-    state.curveBins = Number(event.target.value);
-    render();
+  document.querySelectorAll(".chart-detail-input").forEach((input) => {
+    input.addEventListener("input", (event) => {
+      state.chartDetail = Number(event.target.value);
+      render();
+    });
+
+    input.addEventListener("click", (event) => {
+      event.stopPropagation();
+    });
   });
 
-  document.getElementById("scatterZoom").addEventListener("input", (event) => {
-    state.scatterZoom = Number(event.target.value);
-    render();
-  });
-
-  document.getElementById("expandCurve").addEventListener("click", () => {
-    state.expandedChart = "curve";
-    render();
-  });
-
-  document.getElementById("expandScatter").addEventListener("click", () => {
-    state.expandedChart = "scatter";
-    render();
+  document.querySelectorAll(".chart-panel").forEach((panel) => {
+    panel.addEventListener("click", () => {
+      state.expandedChart = panel.dataset.expandChart;
+      render();
+    });
   });
 
   document.getElementById("closeChartModal").addEventListener("click", () => {
@@ -1007,13 +1029,16 @@ function render() {
   renderKpis(view);
   renderScoreDistribution(view);
   renderScatterPlot(view);
-  renderIndustryMix(view);
   renderEfficiencyPlot(view);
   renderAudienceFitChart(view);
   renderSummaryRail(view);
   renderLeaderboard(view);
   renderAdvisor(view);
   renderChartModal(view);
+
+  document.querySelectorAll(".chart-detail-input").forEach((input) => {
+    input.value = String(state.chartDetail);
+  });
 }
 
 async function init() {
