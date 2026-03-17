@@ -1,33 +1,146 @@
-# RoC Hackathon - Semantic Projected Score Engine
+# RoC Hackathon
+## Atlas Brief: Semantic Creator Match Intelligence
 
-This submission implements a hybrid creator search pipeline that balances:
+This project implements a hybrid creator discovery system for the RoC hackathon challenge. It blends semantic relevance from embeddings with RoC's commercial `projected_score` to produce a ranked shortlist of creators that are both contextually aligned and commercially credible.
 
-- semantic relevance from embeddings
-- commercial viability from RoC's `projected_score`
+The repo also includes **Atlas Brief**, a polished executive dashboard designed to present the final recommendations in a CEO-ready format.
 
-The result is a ranker that can surface creators who are both contextually aligned with a query and likely to convert.
+## Executive Summary
 
-## Architecture
+The ranking engine is built around a simple idea:
 
-The project is split into four layers:
+- use embeddings to understand meaning, not just keywords
+- preserve RoC's business signal instead of discarding it
+- combine both with a convex fusion formula that is easy to explain and defend
 
-1. `creators.json`
-   Raw creator dataset with bios, content tags, performance metrics, and RoC-provided `projected_score`.
+This makes the system appropriate for brand-side decision making, where "creative fit" and "commercial confidence" both matter.
 
-2. `scripts/ingest.ts`
-   Reads creators, builds searchable text, generates embeddings, and stores them in Postgres with `pgvector`.
+## Quick Start
 
-3. `src/searchCreators.ts`
-   Embeds the incoming query + brand profile, retrieves semantic candidates from the vector store, and reranks them with a convex-combination hybrid scoring formula.
+### Fastest local demo
 
-4. `scripts/demo.ts`
-   Runs the required challenge query and writes the top results to `output/brand_smart_home_top10.json`.
+If you just want to run the project locally without OpenAI or Postgres:
 
-## Retrieval + Ranking Design
+```bash
+npm install
+env EMBEDDING_PROVIDER=local VECTOR_BACKEND=memory npm run demo
+npm run dashboard
+```
 
-### Search document used for each creator
+Then open:
 
-Each creator is embedded using a single searchable document composed from:
+```text
+http://127.0.0.1:4173
+```
+
+This will:
+
+- generate the top 10 recommendation set
+- write the results to `output/brand_smart_home_top10.json`
+- launch the Atlas Brief presentation dashboard
+
+## How To Run The Dashboard
+
+The dashboard reads from the generated output JSON, so run the demo first and then start the dashboard server.
+
+```bash
+env EMBEDDING_PROVIDER=local VECTOR_BACKEND=memory npm run demo
+npm run dashboard
+```
+
+Open:
+
+```text
+http://127.0.0.1:4173
+```
+
+If you already generated the output file earlier, you only need:
+
+```bash
+npm run dashboard
+```
+
+## Submission-Grade Setup
+
+For the intended challenge path using OpenAI embeddings and Postgres with `pgvector`:
+
+### 1. Install dependencies
+
+```bash
+npm install
+```
+
+### 2. Create your environment file
+
+```bash
+cp .env.example .env
+```
+
+Then configure:
+
+```env
+OPENAI_API_KEY=your_real_key
+EMBEDDING_PROVIDER=openai
+VECTOR_BACKEND=postgres
+DATABASE_URL=your_real_postgres_url
+```
+
+### 3. Enable `pgvector`
+
+Use either:
+
+- Supabase Postgres with `CREATE EXTENSION IF NOT EXISTS vector;`
+- local Postgres with the `pgvector` extension installed
+
+### 4. Ingest the creator dataset
+
+```bash
+npm run ingest
+```
+
+### 5. Generate the challenge output
+
+```bash
+npm run demo
+```
+
+This runs the required query:
+
+```text
+Affordable home decor for small apartments
+```
+
+against the `brand_smart_home` profile and writes:
+
+```text
+output/brand_smart_home_top10.json
+```
+
+### 6. Present the results
+
+```bash
+npm run dashboard
+```
+
+## What Atlas Brief Shows
+
+Atlas Brief is the executive presentation layer for the search engine. It includes:
+
+- a refined title and presentation identity
+- headline KPI cards
+- a featured top recommendation
+- an executive readout of the shortlist
+- category distribution analysis
+- a polished ranked-candidate view with score breakdowns
+- the underlying scoring formula and runtime metadata
+
+The goal is to make the technical output feel presentation-ready instead of raw JSON.
+
+## Ranking Methodology
+
+### Retrieval
+
+Each creator is embedded using a search document composed from:
 
 - username
 - bio
@@ -40,23 +153,18 @@ Each creator is embedded using a single searchable document composed from:
 - audience gender
 - audience age ranges
 
-This keeps the vector representation grounded in both style and commercial context.
+The incoming search query is expanded with the brand profile:
 
-### Query document
-
-The search query is expanded with the brand profile:
-
-- raw natural-language query
 - brand industries
 - target audience gender
 - target audience age ranges
 - brand GMV
 
-That means semantic retrieval is aware of the business context before reranking starts.
+This makes retrieval aware of both semantic intent and business context before reranking.
 
-### Hybrid scoring formula
+### Fusion Formula
 
-For the top semantic candidates, the final score is:
+The final ranking uses a convex combination:
 
 ```text
 projected_normalized = (projected_score - 60) / 40
@@ -68,24 +176,29 @@ final_score =
   )
 ```
 
-This follows the standard convex-combination fusion pattern for hybrid retrieval. In this implementation, `alpha` is derived from the `brandProfile` to slightly shift the balance between semantic discovery and commercial conservatism:
+Where:
 
-- `semantic_score`
-  Cosine similarity between the query embedding and the creator embedding.
+- `semantic_score` is cosine similarity between the query embedding and creator embedding
+- `projected_normalized` rescales RoC's `projected_score` from `60-100` to `0-1`
+- `alpha` is a brand-aware weight derived from the `brandProfile`
 
-- `projected_normalized`
-  RoC's `projected_score` normalized from the provided `60-100` range to `0-1`.
+The result is a scoring system that stays explainable while still allowing the brand context to influence how aggressively the system prioritizes semantic discovery versus commercial conservatism.
 
-- `alpha`
-  A brand-aware fusion weight clamped to `[0.55, 0.80]`.
+## Architecture
 
-It is computed from:
+The project is organized into four layers:
 
-- brand GMV: higher GMV brands lean slightly more toward commercial conservatism
-- industry breadth: multi-industry brands lean slightly more toward semantic exploration
-- audience breadth: broader target-age coverage leans slightly more toward semantic exploration
+1. **Dataset**
+   `creators.json` stores the creator corpus and RoC's structured business metrics.
 
-This keeps the final score academically clean while still letting the brand profile influence retrieval behavior.
+2. **Embedding + Storage**
+   `scripts/ingest.ts`, `src/embeddings.ts`, and `src/vectorStore.ts` generate embeddings and store them in Postgres with `pgvector`.
+
+3. **Search + Ranking**
+   `src/searchCreators.ts` retrieves semantic candidates and applies the convex fusion formula.
+
+4. **Presentation**
+   `scripts/demo.ts` writes the challenge output JSON, and `dashboard/` renders the Atlas Brief executive dashboard.
 
 ## Vector Database Schema
 
@@ -107,81 +220,7 @@ CREATE TABLE IF NOT EXISTS creators (
 );
 ```
 
-Similarity search uses `pgvector` cosine distance and an IVFFlat index.
-
-## Setup
-
-### 1. Install
-
-```bash
-npm install
-```
-
-### 2. Configure environment
-
-```bash
-cp .env.example .env
-```
-
-Then set:
-
-- `OPENAI_API_KEY`
-- `DATABASE_URL`
-
-Recommended submission settings:
-
-```env
-EMBEDDING_PROVIDER=openai
-VECTOR_BACKEND=postgres
-```
-
-### 3. Enable `pgvector`
-
-Use either:
-
-- Supabase Postgres with `CREATE EXTENSION IF NOT EXISTS vector;`
-- local Postgres/Docker with `pgvector`
-
-### 4. Ingest creators
-
-```bash
-npm run ingest
-```
-
-This will:
-
-- create the schema if needed
-- generate embeddings for all creators
-- upsert them into the `creators` table
-
-### 5. Run the challenge demo
-
-```bash
-npm run demo
-```
-
-This runs the required query:
-
-```text
-Affordable home decor for small apartments
-```
-
-against the `brand_smart_home` profile and writes:
-
-```text
-output/brand_smart_home_top10.json
-```
-
-## Local Fallback Mode
-
-For local development without Postgres, the project also supports:
-
-```env
-EMBEDDING_PROVIDER=local
-VECTOR_BACKEND=memory
-```
-
-This uses a deterministic hashed embedding fallback and in-memory cosine search. It is convenient for smoke testing, but the intended submission path is still `OpenAI + Postgres/pgvector`.
+Similarity search uses cosine distance through `pgvector` and an IVFFlat index.
 
 ## Commands
 
@@ -192,32 +231,27 @@ npm run demo
 npm run dashboard
 ```
 
-Optional demo flags:
+Optional demo arguments:
 
 ```bash
 npm run demo -- --brand brand_smart_home --top 10
 ```
 
-To present the results in the executive dashboard:
+## Repository Guide
 
-```bash
-npm run dashboard
-```
-
-Then open `http://localhost:4173`.
-
-## Files of Interest
-
-- `src/searchCreators.ts` - hybrid retrieval and convex-combination reranking
-- `src/embeddings.ts` - OpenAI + local embedding providers
-- `src/vectorStore.ts` - Postgres/pgvector and in-memory search backends
-- `src/brandProfiles.ts` - brand profile fixtures including `brand_smart_home`
+- `src/searchCreators.ts` - core hybrid search and ranking logic
+- `src/embeddings.ts` - OpenAI and local embedding providers
+- `src/vectorStore.ts` - Postgres/pgvector and in-memory retrieval backends
+- `src/brandProfiles.ts` - brand fixtures including `brand_smart_home`
 - `scripts/ingest.ts` - ingestion pipeline
-- `scripts/demo.ts` - reproducible demo runner
-- `scripts/dashboard.ts` - lightweight local server for the executive presentation UI
-- `sql/schema.sql` - database schema
-- `dashboard/` - Atlas Brief presentation layer
+- `scripts/demo.ts` - reproducible challenge runner
+- `scripts/dashboard.ts` - local server for Atlas Brief
+- `dashboard/` - executive presentation frontend
+- `sql/schema.sql` - Postgres schema
+- `output/brand_smart_home_top10.json` - generated challenge result set
 
 ## Notes
 
-- The local embedding path exists for reproducibility, but OpenAI embeddings are the highest-accuracy option available in this implementation.
+- The local mode exists for easy testing and presentation without external services.
+- The highest-accuracy path is still `OpenAI + Postgres/pgvector`.
+- Run the demo again whenever you want to refresh the data shown in Atlas Brief.
