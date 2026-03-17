@@ -1,0 +1,79 @@
+<svg width="1440" height="860" viewBox="0 0 1440 860" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1440" height="860" fill="#F3F8FF"/>
+
+  <rect x="40" y="34" width="1360" height="74" rx="18" fill="#FFFFFF" stroke="#D4E2F5"/>
+  <rect x="72" y="56" width="38" height="38" fill="url(#brand)"/>
+  <rect x="128" y="60" width="184" height="12" rx="6" fill="#0A1733"/>
+  <rect x="128" y="80" width="132" height="9" rx="4.5" fill="#6D7C96"/>
+  <rect x="954" y="60" width="86" height="11" rx="5.5" fill="#6D7C96"/>
+  <rect x="1068" y="60" width="92" height="11" rx="5.5" fill="#6D7C96"/>
+  <rect x="1188" y="60" width="112" height="11" rx="5.5" fill="#6D7C96"/>
+  <rect x="1250" y="52" width="118" height="38" rx="19" fill="#0F5ED7"/>
+
+  <rect x="40" y="136" width="1360" height="182" rx="28" fill="url(#hero)" stroke="#D4E2F5"/>
+  <text x="84" y="226" fill="#083D91" font-family="Georgia, serif" font-size="60" font-weight="700">Atlas turns</text>
+  <text x="84" y="284" fill="#0F5ED7" font-family="Georgia, serif" font-size="60" font-style="italic">creator research</text>
+  <text x="84" y="342" fill="#083D91" font-family="Georgia, serif" font-size="60" font-weight="700">into a shortlist.</text>
+  <rect x="84" y="380" width="430" height="14" rx="7" fill="#6D7C96"/>
+  <rect x="84" y="404" width="394" height="14" rx="7" fill="#6D7C96"/>
+  <rect x="84" y="438" width="176" height="48" rx="24" fill="#0F5ED7"/>
+  <rect x="280" y="438" width="160" height="48" rx="24" fill="#FFFFFF" stroke="#B7CBE4"/>
+  <rect x="916" y="170" width="396" height="244" rx="24" fill="#FFFFFF" stroke="#D4E2F5"/>
+  <rect x="948" y="204" width="176" height="12" rx="6" fill="#D6E5FA"/>
+  <rect x="948" y="226" width="142" height="12" rx="6" fill="#E7F0FC"/>
+  <rect x="948" y="264" width="332" height="112" rx="18" fill="#F3F8FF"/>
+  <path d="M972 350C1008 326 1046 332 1084 292C1128 246 1170 320 1210 268C1237 234 1260 248 1284 226" stroke="#0F5ED7" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="1210" cy="268" r="8" fill="#083D91"/>
+
+  <rect x="40" y="344" width="1360" height="456" rx="28" fill="#FFFFFF" stroke="#D4E2F5"/>
+  <text x="72" y="392" fill="#6D7C96" font-family="Arial, sans-serif" font-size="12" font-weight="700" letter-spacing="2">ANALYTICS</text>
+  <text x="72" y="438" fill="#0A1733" font-family="Arial, sans-serif" font-size="44" font-weight="700">Market-wide diagnostics</text>
+  <rect x="1034" y="398" width="266" height="14" rx="7" fill="#6D7C96"/>
+
+  <rect x="72" y="464" width="622" height="272" rx="16" fill="#FBFDFF" stroke="#D4E2F5"/>
+  <rect x="718" y="464" width="622" height="272" rx="16" fill="#FBFDFF" stroke="#D4E2F5"/>
+  <rect x="72" y="752" width="622" height="272" rx="16" fill="#FBFDFF" stroke="#D4E2F5" opacity="0"/>
+  <rect x="718" y="752" width="622" height="272" rx="16" fill="#FBFDFF" stroke="#D4E2F5" opacity="0"/>
+
+  <text x="98" y="506" fill="#6D7C96" font-family="Arial, sans-serif" font-size="12" font-weight="700" letter-spacing="2">SCORE DISTRIBUTION</text>
+  <text x="98" y="538" fill="#0A1733" font-family="Arial, sans-serif" font-size="20" font-weight="700">Universe curve</text>
+  <rect x="496" y="496" width="80" height="10" rx="5" fill="#6D7C96"/>
+  <rect x="504" y="520" width="146" height="10" rx="5" fill="#B7CBE4"/>
+  <circle cx="572" cy="525" r="11" fill="#0F5ED7"/>
+  <path d="M128 668L128 576" stroke="#D4E2F5" stroke-width="2"/>
+  <path d="M128 668L654 668" stroke="#D4E2F5" stroke-width="2"/>
+  <path d="M128 592C176 636 220 620 278 626C338 632 396 646 452 652C520 660 584 672 652 712" stroke="#114E86" stroke-width="4" stroke-linecap="round"/>
+  <path d="M128 592L128 668L652 668" fill="#EAF2FF"/>
+  <circle cx="128" cy="592" r="5" fill="#114E86"/>
+  <circle cx="181" cy="640" r="5" fill="#114E86"/>
+  <circle cx="440" cy="652" r="5" fill="#114E86"/>
+
+  <text x="744" y="506" fill="#6D7C96" font-family="Arial, sans-serif" font-size="12" font-weight="700" letter-spacing="2">COMMERCIAL SCALE</text>
+  <text x="744" y="538" fill="#0A1733" font-family="Arial, sans-serif" font-size="20" font-weight="700">Reach vs. GMV</text>
+  <rect x="1142" y="496" width="80" height="10" rx="5" fill="#6D7C96"/>
+  <rect x="1150" y="520" width="146" height="10" rx="5" fill="#B7CBE4"/>
+  <circle cx="1218" cy="525" r="11" fill="#0F5ED7"/>
+  <path d="M780 668L780 580" stroke="#D4E2F5" stroke-width="2"/>
+  <path d="M780 668L1306 668" stroke="#D4E2F5" stroke-width="2"/>
+  <circle cx="1112" cy="636" r="5" fill="#B0BDCF"/>
+  <circle cx="1144" cy="606" r="5" fill="#B0BDCF"/>
+  <circle cx="1178" cy="594" r="5" fill="#B0BDCF"/>
+  <circle cx="1218" cy="618" r="9" fill="#114E86"/>
+  <circle cx="1244" cy="628" r="5" fill="#B0BDCF"/>
+  <circle cx="1278" cy="640" r="5" fill="#B0BDCF"/>
+  <rect x="1136" y="576" width="110" height="8" rx="4" fill="#DDE8F8"/>
+  <rect x="1160" y="594" width="92" height="8" rx="4" fill="#DDE8F8"/>
+
+  <rect x="72" y="752" width="622" height="0" fill="none"/>
+
+  <defs>
+    <linearGradient id="brand" x1="72" y1="56" x2="110" y2="94" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0F5ED7"/>
+      <stop offset="1" stop-color="#083D91"/>
+    </linearGradient>
+    <linearGradient id="hero" x1="40" y1="136" x2="1400" y2="318" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#EFF6FF"/>
+      <stop offset="1" stop-color="#FFFFFF"/>
+    </linearGradient>
+  </defs>
+</svg>

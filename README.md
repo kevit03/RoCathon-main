@@ -1,34 +1,19 @@
 # Atlas Brief
-## Semantic Creator Match Intelligence for the RoC Hackathon
 
-Atlas Brief is a hybrid creator-screening system built for the RoC challenge. It combines:
+Atlas Brief is a creator-screening product built for the RoC hackathon. It ranks creators using a hybrid model that combines semantic relevance with commercial quality, then presents the result in a guided landing page, an interactive demo, and a short methodology appendix.
 
-- semantic relevance from embeddings
-- RoC's business-side `projected_score`
-- a clean product experience with a guided home page, interactive demo, and compact methodology appendix
+![Atlas dashboard preview](dashboard/atlas-dashboard-preview.svg)
 
-Instead of dropping reviewers straight into a dashboard, Atlas now opens with a product-style walkthrough that explains what the system is, what terms like `GMV` mean, and how the scoring works before users enter the live demo.
+## What It Does
 
-## Product Flow
-
-Atlas Brief is now split into three surfaces:
-
-1. `Home`
-   A guided landing page that explains Atlas, defines the core industry terms, and introduces the walkthrough.
-
-2. `Demo`
-   The live analytics console where users filter creators, inspect the Atlas Score, open charts, and run the campaign advisor.
-
-3. `Method`
-   A shorter methodology appendix with expandable details for reviewers who want the formulas and research rationale.
-
-![Atlas flow](dashboard/atlas-flow.svg)
+- screens the full `creators.json` universe
+- runs the official challenge query for `brand_smart_home`
+- exports the top 10 as JSON
+- presents the results in a polished dashboard with charts, filters, and PDF export
 
 ## Quick Start
 
-### Fastest local path
-
-If you want the full experience locally without OpenAI or Postgres:
+For the fastest local path with no OpenAI key or Postgres:
 
 ```bash
 npm install
@@ -36,130 +21,31 @@ env EMBEDDING_PROVIDER=local VECTOR_BACKEND=memory npm run demo
 npm run dashboard
 ```
 
-Then open:
+Open:
 
-- `http://127.0.0.1:4173/` for the guided home page
-- `http://127.0.0.1:4173/demo.html` for the live demo
+- `http://127.0.0.1:4173/` for the landing page
+- `http://127.0.0.1:4173/demo.html` for the demo
 - `http://127.0.0.1:4173/methodology.html` for the methodology page
 
-This path:
+## Official Challenge Output
 
-- generates the challenge output JSON
-- launches the Atlas Brief web experience
-- avoids external API and database setup
-
-## What The Reviewer Sees
-
-### Home page
-
-The landing page explains:
-
-- what Atlas is
-- what `GMV`, `projected score`, `semantic fit`, and `audience fit` mean
-- what happens inside the demo
-
-### Demo
-
-The demo includes:
-
-- brand-profile switching
-- creator filtering by type and industry
-- a selected-creator Atlas Score breakdown
-- a 2x2 analytics grid
-- hover magnification and click-to-pin chart expansion
-- a three-question campaign advisor
-
-### Methodology
-
-The methodology page keeps the math out of the main product and presents:
-
-- the official challenge formula
-- the Atlas screening formula
-- short research-backed explanations
-- expandable long-form details only when needed
-
-## How To Run The Dashboard
-
-Atlas Brief reads from the generated challenge output, so the demo data should exist first.
-
-```bash
-env EMBEDDING_PROVIDER=local VECTOR_BACKEND=memory npm run demo
-npm run dashboard
-```
-
-If the output JSON already exists, you can just run:
-
-```bash
-npm run dashboard
-```
-
-## Submission-Grade Setup
-
-For the intended production-style path using OpenAI embeddings and Postgres with `pgvector`:
-
-### 1. Install dependencies
-
-```bash
-npm install
-```
-
-### 2. Create `.env`
-
-```bash
-cp .env.example .env
-```
-
-Then configure:
-
-```env
-OPENAI_API_KEY=your_real_key
-EMBEDDING_PROVIDER=openai
-VECTOR_BACKEND=postgres
-DATABASE_URL=your_real_postgres_url
-```
-
-### 3. Enable `pgvector`
-
-Use either:
-
-- Supabase Postgres with `CREATE EXTENSION IF NOT EXISTS vector;`
-- local Postgres with the `pgvector` extension installed
-
-### 4. Ingest creators
-
-```bash
-npm run ingest
-```
-
-### 5. Generate the challenge output
-
-```bash
-npm run demo
-```
-
-This runs the required query:
+The required submission query is:
 
 ```text
 Affordable home decor for small apartments
 ```
 
-against the `brand_smart_home` profile and writes:
+using the `brand_smart_home` profile.
+
+The generated output file is:
 
 ```text
 output/brand_smart_home_top10.json
 ```
 
-### 6. Open Atlas Brief
-
-```bash
-npm run dashboard
-```
-
-## Ranking Overview
+## Scoring
 
 ### Official challenge ranker
-
-The required challenge formula uses a convex combination:
 
 ```text
 projected_normalized = (projected_score - 60) / 40
@@ -171,38 +57,54 @@ final_score =
   )
 ```
 
-Why this matters:
+This is a convex combination of normalized semantic relevance and normalized projected value.
 
-- semantic relevance captures meaning, not just keywords
-- `projected_score` preserves RoC's existing business signal
-- convex fusion keeps the score explainable and defensible
+### Atlas demo score
 
-### Atlas Score
+```text
+commercial_quality =
+  0.65 * projected_normalized +
+  0.20 * engagement_norm +
+  0.15 * gmv_norm
 
-The live demo uses a separate screening score for exploring the full creator universe:
+relevance_score =
+  (industry_match + query_overlap + audience_fit) / 3
 
-- `relevance_score = (industry_match + query_overlap + audience_fit) / 3`
-- `atlas_score = 100 * (0.60 * relevance_score + 0.40 * commercial_quality)`
+atlas_score =
+  100 * (
+    0.60 * relevance_score +
+    0.40 * commercial_quality
+  )
+```
 
-That score is for exploration and explanation. It uses equal treatment inside the relevance block, then blends relevance against commercial quality with one top-level business decision. The official challenge ranker remains preserved separately.
+The demo score is for exploration. It uses equal treatment inside the relevance block, then blends relevance against commercial quality.
 
-## Architecture
+## Full Setup
 
-The project is organized into four layers:
+For the intended `OpenAI + Postgres/pgvector` path:
 
-1. `Dataset`
-   `creators.json` stores the creator corpus and structured business metrics.
+```bash
+cp .env.example .env
+```
 
-2. `Embedding + storage`
-   `scripts/ingest.ts`, `src/embeddings.ts`, and `src/vectorStore.ts` generate embeddings and store them in Postgres with `pgvector`.
+Set:
 
-3. `Search + ranking`
-   `src/searchCreators.ts` retrieves semantic candidates and applies the challenge scoring logic.
+```env
+OPENAI_API_KEY=your_real_key
+EMBEDDING_PROVIDER=openai
+VECTOR_BACKEND=postgres
+DATABASE_URL=your_real_postgres_url
+```
 
-4. `Presentation`
-   `scripts/demo.ts` generates the challenge output JSON and `dashboard/` serves the Atlas Brief product frontend.
+Then run:
 
-## Commands
+```bash
+npm run ingest
+npm run demo
+npm run dashboard
+```
+
+## Main Commands
 
 ```bash
 npm run typecheck
@@ -211,31 +113,18 @@ npm run demo
 npm run dashboard
 ```
 
-Optional demo arguments:
+## Key Files
 
-```bash
-npm run demo -- --brand brand_smart_home --top 10
-```
-
-## Repository Guide
-
-- `src/searchCreators.ts` - hybrid search and ranking logic
-- `src/embeddings.ts` - OpenAI and local embedding providers
-- `src/vectorStore.ts` - Postgres/pgvector and in-memory retrieval backends
-- `src/brandProfiles.ts` - brand fixtures including `brand_smart_home`
-- `scripts/ingest.ts` - ingestion pipeline
-- `scripts/demo.ts` - reproducible challenge runner
-- `scripts/dashboard.ts` - local Atlas Brief server
-- `dashboard/index.html` - guided product landing page
-- `dashboard/demo.html` - live analytics console
-- `dashboard/methodology.html` - methodology appendix
-- `dashboard/atlas-hero.svg` - branded hero visual
-- `dashboard/atlas-flow.svg` - system flow visual
-- `sql/schema.sql` - Postgres schema
-- `output/brand_smart_home_top10.json` - generated challenge result set
+- `src/searchCreators.ts` - official challenge ranking logic
+- `scripts/ingest.ts` - embedding and storage pipeline
+- `scripts/demo.ts` - reproducible challenge run
+- `dashboard/index.html` - landing page
+- `dashboard/demo.html` - live dashboard
+- `dashboard/methodology.html` - formulas and references
+- `output/brand_smart_home_top10.json` - top 10 submission output
 
 ## Notes
 
-- The local mode exists for easy review and presentation without external services.
-- The highest-accuracy path is still `OpenAI + Postgres/pgvector`.
-- Re-run `npm run demo` whenever you want to refresh the data shown in Atlas Brief.
+- local mode is the easiest review path
+- `OpenAI + Postgres/pgvector` is the intended production-style path
+- the dashboard can export both JSON and PDF from the demo page
