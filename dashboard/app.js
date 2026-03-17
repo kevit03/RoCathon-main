@@ -112,6 +112,13 @@ function formatPercent(value) {
   return `${(value * 100).toFixed(1)}%`;
 }
 
+function formatDateTime(value) {
+  return new Date(value).toLocaleString("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
 function humanizeUsername(username) {
   return username
     .split(/[_-]+/)
@@ -177,6 +184,572 @@ function chartWindowCreators(creators) {
   const keepRatio = chartDetailRatio();
   const keepCount = Math.max(12, Math.round(creators.length * keepRatio));
   return creators.slice(0, keepCount);
+}
+
+function downloadJson(filename, data) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function normalizeFinalScore(value) {
+  return value > 1 ? round(value / 100, 4) : round(value, 4);
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function buildExportResults(view) {
+  const usingOfficialChallengeOutput =
+    state.selectedProfileId === "brand_smart_home" &&
+    state.selectedIndustry === "all" &&
+    state.searchTerm.trim() === "" &&
+    dashboardData.challengeOutput?.results?.length >= 10;
+
+  if (usingOfficialChallengeOutput) {
+    return dashboardData.challengeOutput.results.slice(0, 10).map((creator) => ({
+      username: creator.username,
+      bio: creator.bio,
+      content_style_tags: creator.content_style_tags,
+      projected_score: creator.projected_score,
+      metrics: creator.metrics,
+      scores: {
+        semantic_score: round(creator.scores.semantic_score, 4),
+        projected_score: round(creator.scores.projected_score, 2),
+        final_score: normalizeFinalScore(creator.scores.final_score),
+      },
+    }));
+  }
+
+  return view.universe.topTen.map((creator) => ({
+    username: creator.username,
+    bio: creator.bio,
+    content_style_tags: creator.content_style_tags,
+    projected_score: round(creator.projected_score, 2),
+    metrics: creator.metrics,
+    scores: {
+      semantic_score: round(creator.diagnostics.semanticProxy, 4),
+      projected_score: round(creator.projected_score, 2),
+      final_score: normalizeFinalScore(creator.atlasScore),
+    },
+  }));
+}
+
+function buildPdfReportHtml(view) {
+  const exportedResults = buildExportResults(view);
+  const topCreator = view.universe.topTen[0] ?? null;
+  const generatedAt = formatDateTime(dashboardData.challengeOutput.generated_at);
+  const totalTopTenGmv = view.universe.topTen.reduce(
+    (sum, creator) => sum + creator.metrics.total_gmv_30d,
+    0
+  );
+  const totalTopTenReach = view.universe.topTen.reduce(
+    (sum, creator) => sum + creator.metrics.follower_count,
+    0
+  );
+  const meanAtlasScore = average(view.universe.topTen, (creator) => creator.atlasScore);
+  const meanProjectedScore = average(view.universe.topTen, (creator) => creator.projected_score);
+  const tableRows = exportedResults
+    .map(
+      (creator, index) => `
+        <tr>
+          <td>${index + 1}</td>
+          <td>
+            <strong>${escapeHtml(humanizeUsername(creator.username))}</strong>
+            <div class="table-sub">@${escapeHtml(creator.username)}</div>
+          </td>
+          <td>${escapeHtml(creator.content_style_tags.join(", "))}</td>
+          <td>${(creator.scores.semantic_score * 100).toFixed(1)}</td>
+          <td>${creator.scores.projected_score.toFixed(1)}</td>
+          <td>${(creator.scores.final_score * 100).toFixed(1)}</td>
+          <td>${formatCurrency(creator.metrics.total_gmv_30d)}</td>
+        </tr>
+      `
+    )
+    .join("");
+
+  const topCreatorBars = topCreator
+    ? [
+        { label: "Profile fit", weight: "38%", value: topCreator.diagnostics.industryFit },
+        { label: "Query alignment", weight: "27%", value: topCreator.diagnostics.queryOverlap },
+        { label: "Audience fit", weight: "15%", value: topCreator.diagnostics.audienceFit },
+        { label: "Commercial quality", weight: "20%", value: topCreator.diagnostics.commercialIndex },
+      ]
+        .map(
+          (item) => `
+            <div class="component-row">
+              <div class="component-meta">
+                <span>${item.label}</span>
+                <strong>${item.weight}</strong>
+              </div>
+              <div class="component-bar">
+                <span style="width:${Math.max(item.value * 100, 4)}%"></span>
+              </div>
+            </div>
+          `
+        )
+        .join("")
+    : "";
+
+  const recommendationCopy = topCreator
+    ? `${creatorDisplayName(topCreator)} leads the shortlist because it combines strong brand alignment with above-benchmark commercial quality. The creator sits inside the target audience, fits the profile industries, and clears the cohort on both projected score and GMV.`
+    : "No ranked creators are available for the current filter state.";
+
+  return `
+    <!doctype html>
+    <html lang="en">
+      <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Atlas Brief Report</title>
+        <style>
+          :root {
+            --ink: #0f172a;
+            --muted: #5e697b;
+            --line: #d7dee8;
+            --surface: #ffffff;
+            --accent: #0b4a6f;
+            --accent-soft: #e9f2f6;
+            --warm: #9b7b49;
+          }
+
+          * { box-sizing: border-box; }
+
+          body {
+            margin: 0;
+            color: var(--ink);
+            background: #f4f7f9;
+            font-family: "SF Pro Text", "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+          }
+
+          .page {
+            width: min(960px, calc(100% - 48px));
+            margin: 28px auto;
+            padding: 34px 38px 40px;
+            background: var(--surface);
+            border: 1px solid var(--line);
+          }
+
+          .report-topbar,
+          .metric-grid,
+          .two-up,
+          .recommendation-card,
+          .method-note,
+          .table-card {
+            page-break-inside: avoid;
+          }
+
+          .report-topbar {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 24px;
+            padding-bottom: 24px;
+            border-bottom: 1px solid var(--line);
+          }
+
+          .brand {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+          }
+
+          .mark {
+            position: relative;
+            width: 34px;
+            height: 34px;
+            background: linear-gradient(145deg, var(--accent) 0%, #0a3048 100%);
+          }
+
+          .mark::before {
+            content: "A";
+            position: absolute;
+            inset: 0;
+            display: grid;
+            place-items: center;
+            color: #fff;
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 0.14em;
+          }
+
+          .mark::after {
+            content: "";
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            width: 6px;
+            height: 6px;
+            background: var(--warm);
+          }
+
+          .eyebrow {
+            margin: 0 0 8px;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+          }
+
+          h1, h2, h3, p { margin: 0; }
+
+          h1 {
+            margin-top: 10px;
+            font-size: 42px;
+            line-height: 0.96;
+            letter-spacing: -0.05em;
+          }
+
+          h2 {
+            font-size: 24px;
+            line-height: 1;
+            letter-spacing: -0.03em;
+          }
+
+          h3 {
+            font-size: 17px;
+            line-height: 1.2;
+            letter-spacing: -0.02em;
+          }
+
+          .lede,
+          .table-sub,
+          .meta-stack,
+          .copy {
+            color: var(--muted);
+          }
+
+          .lede {
+            max-width: 58ch;
+            margin-top: 14px;
+            font-size: 16px;
+            line-height: 1.65;
+          }
+
+          .meta-stack {
+            display: grid;
+            gap: 6px;
+            text-align: right;
+            font-size: 13px;
+            line-height: 1.45;
+          }
+
+          .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 14px;
+            margin-top: 24px;
+          }
+
+          .metric {
+            padding: 16px;
+            background: #fbfdfe;
+            border: 1px solid var(--line);
+          }
+
+          .metric strong {
+            display: block;
+            margin-top: 8px;
+            font-size: 34px;
+            line-height: 0.95;
+            letter-spacing: -0.05em;
+          }
+
+          .metric .copy {
+            margin-top: 10px;
+            font-size: 14px;
+            line-height: 1.5;
+          }
+
+          .two-up {
+            display: grid;
+            grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+            gap: 16px;
+            margin-top: 24px;
+          }
+
+          .recommendation-card,
+          .method-note,
+          .table-card {
+            padding: 18px;
+            border: 1px solid var(--line);
+          }
+
+          .recommendation-card {
+            background: linear-gradient(180deg, #fafdff 0%, #ffffff 100%);
+          }
+
+          .profile-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 14px;
+          }
+
+          .tag {
+            padding: 6px 10px;
+            background: var(--accent-soft);
+            color: var(--accent);
+            font-size: 12px;
+            font-weight: 600;
+          }
+
+          .component-list {
+            display: grid;
+            gap: 12px;
+            margin-top: 18px;
+          }
+
+          .component-meta {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 6px;
+            font-size: 13px;
+          }
+
+          .component-bar {
+            height: 8px;
+            background: #e8eef3;
+          }
+
+          .component-bar span {
+            display: block;
+            height: 100%;
+            background: var(--accent);
+          }
+
+          .method-note .copy {
+            margin-top: 12px;
+            font-size: 14px;
+            line-height: 1.6;
+          }
+
+          .formula {
+            margin-top: 16px;
+            padding: 14px;
+            color: var(--ink);
+            background: #f8fbfd;
+            border: 1px solid var(--line);
+            font-family: "SFMono-Regular", Consolas, monospace;
+            font-size: 13px;
+            line-height: 1.65;
+            white-space: pre-wrap;
+          }
+
+          .table-card {
+            margin-top: 18px;
+          }
+
+          table {
+            width: 100%;
+            margin-top: 12px;
+            border-collapse: collapse;
+          }
+
+          th, td {
+            padding: 12px 8px;
+            border-bottom: 1px solid var(--line);
+            text-align: left;
+            vertical-align: top;
+            font-size: 13px;
+          }
+
+          th {
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+          }
+
+          .footer {
+            display: flex;
+            justify-content: space-between;
+            gap: 24px;
+            margin-top: 18px;
+            padding-top: 14px;
+            color: var(--muted);
+            border-top: 1px solid var(--line);
+            font-size: 12px;
+          }
+
+          @page {
+            size: letter;
+            margin: 16mm;
+          }
+
+          @media print {
+            body {
+              background: #ffffff;
+            }
+
+            .page {
+              width: 100%;
+              margin: 0;
+              padding: 0;
+              border: 0;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <main class="page">
+          <section class="report-topbar">
+            <div>
+              <div class="brand">
+                <span class="mark" aria-hidden="true"></span>
+                <div>
+                  <p class="eyebrow">Atlas Brief</p>
+                  <strong>Executive creator shortlist</strong>
+                </div>
+              </div>
+              <h1>${escapeHtml(view.profileDetail.label)} market brief</h1>
+              <p class="lede">
+                ${escapeHtml(view.profileDetail.tagline)} Atlas screens the creator universe with a weighted model that prioritizes brand relevance before commercial scale, then returns a defendable top 10 for review.
+              </p>
+            </div>
+            <div class="meta-stack">
+              <span><strong>Generated</strong><br />${escapeHtml(generatedAt)}</span>
+              <span><strong>Profile</strong><br />${escapeHtml(view.profileDetail.id)}</span>
+              <span><strong>Universe</strong><br />${view.universe.all.length} creators screened</span>
+            </div>
+          </section>
+
+          <section class="metric-grid">
+            <article class="metric">
+              <p class="eyebrow">Top recommendation</p>
+              <strong>${escapeHtml(topCreator ? creatorDisplayName(topCreator) : "None")}</strong>
+              <p class="copy">${topCreator ? `${topCreator.atlasScore.toFixed(2)} Atlas score` : "No ranked output"}</p>
+            </article>
+            <article class="metric">
+              <p class="eyebrow">Shortlist GMV</p>
+              <strong>${escapeHtml(formatCurrency(totalTopTenGmv))}</strong>
+              <p class="copy">Combined 30-day GMV across the current top 10.</p>
+            </article>
+            <article class="metric">
+              <p class="eyebrow">Shortlist reach</p>
+              <strong>${escapeHtml(formatCompactNumber(totalTopTenReach))}</strong>
+              <p class="copy">Aggregate follower scale represented in the shortlist.</p>
+            </article>
+            <article class="metric">
+              <p class="eyebrow">Mean quality</p>
+              <strong>${meanAtlasScore.toFixed(2)}</strong>
+              <p class="copy">Average Atlas score with mean projected score ${meanProjectedScore.toFixed(1)}.</p>
+            </article>
+          </section>
+
+          <section class="two-up">
+            <article class="recommendation-card">
+              <p class="eyebrow">Lead recommendation</p>
+              <h2>${escapeHtml(topCreator ? creatorDisplayName(topCreator) : "No selection")}</h2>
+              <p class="lede" style="margin-top:12px; max-width:none;">
+                ${escapeHtml(recommendationCopy)}
+              </p>
+              ${
+                topCreator
+                  ? `
+                    <div class="profile-tags">
+                      ${topCreator.content_style_tags
+                        .map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`)
+                        .join("")}
+                    </div>
+                    <div class="component-list">
+                      ${topCreatorBars}
+                    </div>
+                  `
+                  : ""
+              }
+            </article>
+
+            <aside class="method-note">
+              <p class="eyebrow">Scoring logic</p>
+              <h3>Atlas weights fit ahead of scale</h3>
+              <p class="copy">
+                The dashboard score is intentionally front-loaded toward profile and query relevance so the shortlist does not over-index on large but off-brief creators. Commercial quality enters after fit is established.
+              </p>
+              <div class="formula">atlas_score = 100 * (
+  0.38 * profile_fit +
+  0.27 * query_alignment +
+  0.15 * audience_fit +
+  0.20 * commercial_quality
+)</div>
+              <p class="copy">
+                Commercial quality is itself blended from normalized projected score, engagement, and log-scaled GMV. The official challenge score remains available in the app's methodology view.
+              </p>
+            </aside>
+          </section>
+
+          <section class="table-card">
+            <p class="eyebrow">Submission payload</p>
+            <h2>Top 10 ranked creators</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Creator</th>
+                  <th>Tags</th>
+                  <th>Semantic</th>
+                  <th>Projected</th>
+                  <th>Final</th>
+                  <th>30D GMV</th>
+                </tr>
+              </thead>
+              <tbody>${tableRows}</tbody>
+            </table>
+          </section>
+
+          <footer class="footer">
+            <span>Prepared from Atlas Brief dashboard export.</span>
+            <span>${escapeHtml(view.mode)} | Query: ${escapeHtml(view.profileDetail.defaultQuery)}</span>
+          </footer>
+        </main>
+      </body>
+    </html>
+  `;
+}
+
+function exportPdfReport(view) {
+  const reportWindow = window.open("", "_blank", "noopener,noreferrer");
+
+  if (!reportWindow) {
+    window.alert("Please allow pop-ups to export the PDF report.");
+    return;
+  }
+
+  reportWindow.document.open();
+  reportWindow.document.write(buildPdfReportHtml(view));
+  reportWindow.document.close();
+  reportWindow.document.title = `${state.selectedProfileId}_atlas_report`;
+  reportWindow.focus();
+
+  const printReport = () => {
+    reportWindow.print();
+    reportWindow.onafterprint = () => reportWindow.close();
+  };
+
+  if (reportWindow.document.readyState === "complete") {
+    window.setTimeout(printReport, 250);
+    return;
+  }
+
+  reportWindow.onload = () => {
+    window.setTimeout(printReport, 250);
+  };
 }
 
 function getProfileDetail(id) {
@@ -329,10 +902,7 @@ function renderControls(view) {
 }
 
 function renderMeta(view) {
-  const generatedAt = new Date(dashboardData.challengeOutput.generated_at).toLocaleString("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+  const generatedAt = formatDateTime(dashboardData.challengeOutput.generated_at);
 
   document.getElementById("universeCount").textContent = `${view.universe.all.length}`;
   document.getElementById("generatedAt").textContent = generatedAt;
@@ -1039,6 +1609,27 @@ function render() {
   document.querySelectorAll(".chart-detail-input").forEach((input) => {
     input.value = String(state.chartDetail);
   });
+
+  const exportButton = document.getElementById("exportTopTen");
+  if (exportButton) {
+    exportButton.onclick = () => {
+      const exportPayload = buildExportResults(view);
+      const filename =
+        state.selectedProfileId === "brand_smart_home" &&
+        state.selectedIndustry === "all" &&
+        state.searchTerm.trim() === ""
+          ? "brand_smart_home_top10_submission.json"
+          : `${state.selectedProfileId}_top10_export.json`;
+      downloadJson(filename, exportPayload);
+    };
+  }
+
+  const exportPdfButton = document.getElementById("exportPdfReport");
+  if (exportPdfButton) {
+    exportPdfButton.onclick = () => {
+      exportPdfReport(view);
+    };
+  }
 }
 
 async function init() {
