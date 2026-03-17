@@ -3,15 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Atlas Brief | Executive Creator Intelligence</title>
+    <title>Atlas Brief | Creator Intelligence Console</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <div class="app-shell">
       <header class="topbar">
         <div class="brand-block">
-          <span class="brand-kicker">Atlas Brief</span>
-          <strong>Executive creator intelligence</strong>
+          <div class="brand-lockup">
+            <span class="brand-mark" aria-hidden="true"></span>
+            <div class="brand-block">
+              <span class="brand-kicker">Atlas Brief</span>
+              <strong>Creator intelligence console</strong>
+            </div>
+          </div>
         </div>
         <nav class="topnav">
           <a href="#overview">Overview</a>
@@ -22,146 +27,150 @@
         </nav>
       </header>
 
-      <main>
-        <section class="section hero" id="overview">
-          <div class="hero-copy">
-            <span class="section-kicker">RoC signal engine</span>
-            <h1>Use the full creator universe to surface clean, board-ready recommendations.</h1>
-            <p class="hero-text">
-              Atlas Brief evaluates the entire creator dataset, benchmarks the active profile
-              against the broader market, and turns the result into a business-facing decision
-              surface.
-            </p>
-          </div>
+      <div class="workspace">
+        <aside class="side-rail">
+          <section class="rail-card">
+            <span class="rail-label">Profile</span>
+            <h1>Overview dashboard</h1>
+            <p class="rail-copy" id="profileTagline">Loading...</p>
+          </section>
 
-          <aside class="hero-aside">
-            <div class="mini-stat">
-              <span class="mini-label">Active profile</span>
-              <strong id="activeProfileLabel">Loading...</strong>
+          <section class="rail-card">
+            <div class="rail-section-head">
+              <span class="rail-label">Filters</span>
+              <span class="mode-chip" id="scenarioMode">Loading...</span>
             </div>
-            <div class="mini-stat">
-              <span class="mini-label">Universe analyzed</span>
-              <strong id="universeCount">Loading...</strong>
-            </div>
-            <div class="mini-stat">
-              <span class="mini-label">Last refreshed</span>
-              <strong id="generatedAt">Loading...</strong>
-            </div>
-          </aside>
-        </section>
-
-        <section class="section filter-strip">
-          <div class="filter-grid">
             <label class="field">
               <span>Brand profile</span>
               <select id="profileSelect"></select>
             </label>
             <label class="field">
               <span>Creator type</span>
-              <input id="typeSearch" type="text" placeholder="iphone, decor, premium, studio..." />
+              <input id="typeSearch" type="text" placeholder="iphone, decor, premium..." />
             </label>
             <label class="field">
               <span>Industry</span>
               <select id="industrySelect"></select>
             </label>
-            <div class="field field-static">
-              <span>Scenario mode</span>
-              <strong id="scenarioMode">Loading...</strong>
+          </section>
+
+          <section class="rail-card inspector-card">
+            <div class="rail-section-head">
+              <span class="rail-label">Atlas score</span>
+              <button class="text-button" id="toggleScoreHelp" type="button">How it works</button>
             </div>
-          </div>
-        </section>
-
-        <section class="section kpi-grid" id="kpiGrid"></section>
-
-        <section class="section" id="analytics">
-          <div class="section-header">
-            <div>
-              <span class="section-kicker">Analytics</span>
-              <h2>Market-wide diagnostics</h2>
+            <div id="selectedCreatorSummary"></div>
+            <div class="score-breakdown" id="scoreBreakdown"></div>
+            <div class="score-help" id="scoreHelp" hidden>
+              <p>Atlas Score blends profile fit, query alignment, audience alignment, and commercial quality.</p>
+              <a href="/methodology.html">View formulas</a>
             </div>
-            <p class="section-caption" id="analyticsCaption"></p>
-          </div>
+          </section>
 
-          <div class="analytics-grid">
-            <article class="panel">
-              <div class="panel-header">
-                <span class="panel-label">Score distribution</span>
-                <h3>Universe score ladder</h3>
+          <section class="rail-card">
+            <span class="rail-label">Universe</span>
+            <div class="stack-metrics">
+              <div>
+                <small>Creators analyzed</small>
+                <strong id="universeCount">Loading...</strong>
               </div>
-              <div class="chart-host" id="scoreDistribution"></div>
-            </article>
-
-            <article class="panel">
-              <div class="panel-header">
-                <span class="panel-label">Commercial scale</span>
-                <h3>Reach vs. GMV</h3>
+              <div>
+                <small>Last refresh</small>
+                <strong id="generatedAt">Loading...</strong>
               </div>
-              <div class="chart-host" id="scatterPlot"></div>
-            </article>
+            </div>
+          </section>
+        </aside>
 
-            <article class="panel">
-              <div class="panel-header">
-                <span class="panel-label">Industry mix</span>
-                <h3>Top category concentration</h3>
+        <main class="content-pane">
+          <section class="section" id="overview">
+            <div class="kpi-grid" id="kpiGrid"></div>
+          </section>
+
+          <section class="section" id="analytics">
+            <div class="section-header">
+              <div>
+                <span class="section-kicker">Analytics</span>
+                <h2>Market-wide diagnostics</h2>
               </div>
-              <div class="mix-list" id="industryMix"></div>
+              <p class="section-caption" id="analyticsCaption"></p>
+            </div>
+
+            <div class="analytics-grid">
+              <article class="panel">
+                <div class="panel-header">
+                  <span class="panel-label">Score distribution</span>
+                  <h3>Universe score curve</h3>
+                </div>
+                <div class="chart-host compact" id="scoreDistribution"></div>
+              </article>
+
+              <article class="panel">
+                <div class="panel-header">
+                  <span class="panel-label">Commercial scale</span>
+                  <h3>Reach vs. GMV</h3>
+                </div>
+                <div class="chart-host compact" id="scatterPlot"></div>
+              </article>
+
+              <article class="panel">
+                <div class="panel-header">
+                  <span class="panel-label">Industry mix</span>
+                  <h3>Current market composition</h3>
+                </div>
+                <div class="mix-list" id="industryMix"></div>
+              </article>
+            </div>
+          </section>
+
+          <section class="section" id="leaderboard">
+            <div class="section-header">
+              <div>
+                <span class="section-kicker">Leaderboard</span>
+                <h2>Top-ranked creators</h2>
+              </div>
+              <p class="section-caption">Click a row to inspect the creator and score components.</p>
+            </div>
+
+            <div class="summary-rail" id="summaryRail"></div>
+
+            <article class="table-panel">
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Rank</th>
+                      <th>Creator</th>
+                      <th>Industry</th>
+                      <th>Atlas score</th>
+                      <th>Projected</th>
+                      <th>30D GMV</th>
+                      <th>Views</th>
+                      <th>Engagement</th>
+                    </tr>
+                  </thead>
+                  <tbody id="leaderboardBody"></tbody>
+                </table>
+              </div>
             </article>
-          </div>
-        </section>
+          </section>
 
-        <section class="section" id="leaderboard">
-          <div class="section-header">
-            <div>
-              <span class="section-kicker">Leaderboard</span>
-              <h2>Top-ranked creators</h2>
+          <section class="section" id="advisor">
+            <div class="section-header">
+              <div>
+                <span class="section-kicker">Advisor</span>
+                <h2>Campaign walkthrough</h2>
+              </div>
+              <p class="section-caption">Three quick choices to turn the dashboard into a recommendation engine.</p>
             </div>
-            <p class="section-caption">
-              Sorted by Atlas screening score across the filtered universe. The top of the table
-              is optimized for business selection, not just semantic novelty.
-            </p>
-          </div>
 
-          <div class="summary-rail" id="summaryRail"></div>
-
-          <article class="table-panel">
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Rank</th>
-                    <th>Creator</th>
-                    <th>Industry</th>
-                    <th>Atlas score</th>
-                    <th>Projected</th>
-                    <th>30D GMV</th>
-                    <th>Views</th>
-                    <th>Engagement</th>
-                  </tr>
-                </thead>
-                <tbody id="leaderboardBody"></tbody>
-              </table>
+            <div class="advisor-grid">
+              <article class="panel" id="quizMount"></article>
+              <article class="panel" id="advisorOutput"></article>
             </div>
-          </article>
-        </section>
-
-        <section class="section" id="advisor">
-          <div class="section-header">
-            <div>
-              <span class="section-kicker">Advisor</span>
-              <h2>Guided campaign recommendation</h2>
-            </div>
-            <p class="section-caption">
-              A short three-question flow that turns the current profile into a launch-ready
-              recommendation set.
-            </p>
-          </div>
-
-          <div class="advisor-grid">
-            <article class="panel" id="quizMount"></article>
-            <article class="panel" id="advisorOutput"></article>
-          </div>
-        </section>
-      </main>
+          </section>
+        </main>
+      </div>
     </div>
 
     <script src="/app.js" defer></script>

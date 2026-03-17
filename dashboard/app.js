@@ -3,16 +3,16 @@ const DATA_PATH = "/api/dashboard-data";
 const quizQuestions = [
   {
     id: "objective",
-    prompt: "What is the primary business objective?",
+    prompt: "What matters most right now?",
     options: [
-      { value: "sales", label: "Drive near-term revenue" },
-      { value: "loyalty", label: "Increase ecosystem loyalty" },
-      { value: "awareness", label: "Expand top-of-funnel reach" },
+      { value: "sales", label: "Revenue now" },
+      { value: "loyalty", label: "Ecosystem loyalty" },
+      { value: "awareness", label: "Reach expansion" },
     ],
   },
   {
     id: "voice",
-    prompt: "What type of creator voice do you want?",
+    prompt: "What creator voice fits the brief?",
     options: [
       { value: "technical", label: "Technical authority" },
       { value: "lifestyle", label: "Lifestyle integration" },
@@ -23,9 +23,9 @@ const quizQuestions = [
     id: "rollout",
     prompt: "How concentrated should the plan be?",
     options: [
-      { value: "broad", label: "Broad market launch" },
-      { value: "balanced", label: "Balanced portfolio" },
-      { value: "niche", label: "High-intent niche focus" },
+      { value: "broad", label: "Broad launch" },
+      { value: "balanced", label: "Balanced mix" },
+      { value: "niche", label: "High-intent niche" },
     ],
   },
 ];
@@ -34,6 +34,8 @@ const state = {
   selectedProfileId: "brand_smart_home",
   selectedIndustry: "all",
   searchTerm: "",
+  selectedCreatorUsername: null,
+  showScoreHelp: false,
   quizStarted: false,
   quizStep: 0,
   quizAnswers: {},
@@ -108,19 +110,19 @@ function formatPercent(value) {
   return `${(value * 100).toFixed(1)}%`;
 }
 
+function average(items, mapper) {
+  if (items.length === 0) {
+    return 0;
+  }
+  return items.reduce((sum, item) => sum + mapper(item), 0) / items.length;
+}
+
 function percentile(sortedValues, pct) {
   if (sortedValues.length === 0) {
     return 0;
   }
   const index = Math.floor(clamp(pct, 0, 1) * (sortedValues.length - 1));
   return sortedValues[index];
-}
-
-function average(items, mapper) {
-  if (items.length === 0) {
-    return 0;
-  }
-  return items.reduce((sum, item) => sum + mapper(item), 0) / items.length;
 }
 
 function getProfileDetail(id) {
@@ -151,7 +153,9 @@ function industryFit(creator, profile) {
 }
 
 function buildUniverse(profileDetail) {
-  const searchTokens = tokenize(`${profileDetail.defaultQuery} ${state.searchTerm} ${profileDetail.label}`);
+  const searchTokens = tokenize(
+    `${profileDetail.defaultQuery} ${state.searchTerm} ${profileDetail.label}`
+  );
   const filteredCreators = dashboardData.creators.filter((creator) => {
     if (state.selectedIndustry === "all") {
       return true;
@@ -161,7 +165,10 @@ function buildUniverse(profileDetail) {
 
   const maxGmv = Math.max(...filteredCreators.map((creator) => creator.metrics.total_gmv_30d), 1);
   const maxViews = Math.max(...filteredCreators.map((creator) => creator.metrics.avg_views_30d), 1);
-  const maxFollowers = Math.max(...filteredCreators.map((creator) => creator.metrics.follower_count), 1);
+  const maxFollowers = Math.max(
+    ...filteredCreators.map((creator) => creator.metrics.follower_count),
+    1
+  );
 
   const scored = filteredCreators
     .map((creator) => {
@@ -175,14 +182,6 @@ function buildUniverse(profileDetail) {
         0.65 * normalizeProjected(creator.projected_score) +
         0.2 * clamp(creator.metrics.engagement_rate / 0.12) +
         0.15 * normalizeLog(creator.metrics.total_gmv_30d, maxGmv);
-      const efficiencyIndex =
-        0.5 * clamp(creator.metrics.engagement_rate / 0.12) +
-        0.25 * normalizeLog(creator.metrics.gpm, 50) +
-        0.25 * clamp(
-          creator.metrics.follower_count === 0
-            ? 0
-            : creator.metrics.total_gmv_30d / creator.metrics.follower_count / 0.15
-        );
       const semanticProxy = 0.55 * industry + 0.45 * queryOverlap;
       const atlasScore =
         100 *
@@ -197,12 +196,11 @@ function buildUniverse(profileDetail) {
         ...creator,
         atlasScore: round(atlasScore, 2),
         diagnostics: {
-          semanticProxy: round(semanticProxy, 4),
           industryFit: round(industry, 4),
           queryOverlap: round(queryOverlap, 4),
           audienceFit: round(audience, 4),
           commercialIndex: round(commercialIndex, 4),
-          efficiencyIndex: round(efficiencyIndex, 4),
+          semanticProxy: round(semanticProxy, 4),
           gmvNorm: round(normalizeLog(creator.metrics.total_gmv_30d, maxGmv), 4),
           viewsNorm: round(normalizeLog(creator.metrics.avg_views_30d, maxViews), 4),
           followersNorm: round(normalizeLog(creator.metrics.follower_count, maxFollowers), 4),
@@ -218,10 +216,15 @@ function buildUniverse(profileDetail) {
     })
     .sort((left, right) => right.atlasScore - left.atlasScore);
 
+  if (!state.selectedCreatorUsername || !scored.some((item) => item.username === state.selectedCreatorUsername)) {
+    state.selectedCreatorUsername = scored[0]?.username ?? null;
+  }
+
   return {
     all: scored,
     top: scored.slice(0, 20),
     topTen: scored.slice(0, 10),
+    selected: scored.find((item) => item.username === state.selectedCreatorUsername) ?? null,
   };
 }
 
@@ -247,7 +250,7 @@ function getIndustries() {
   return [...industries];
 }
 
-function renderControls() {
+function renderControls(view) {
   const profileSelect = document.getElementById("profileSelect");
   const industrySelect = document.getElementById("industrySelect");
   const typeSearch = document.getElementById("typeSearch");
@@ -267,21 +270,66 @@ function renderControls() {
     .join("");
 
   typeSearch.value = state.searchTerm;
+  document.getElementById("profileTagline").textContent = view.profileDetail.tagline;
+  document.getElementById("scenarioMode").textContent = view.mode;
 }
 
-function renderHeader(view) {
+function renderMeta(view) {
   const generatedAt = new Date(dashboardData.challengeOutput.generated_at).toLocaleString("en-US", {
     dateStyle: "medium",
     timeStyle: "short",
   });
 
-  document.getElementById("activeProfileLabel").textContent = view.profileDetail.label;
-  document.getElementById("universeCount").textContent = `${view.universe.all.length} creators`;
+  document.getElementById("universeCount").textContent = `${view.universe.all.length}`;
   document.getElementById("generatedAt").textContent = generatedAt;
-  document.getElementById("scenarioMode").textContent = view.mode;
-  document.getElementById(
-    "analyticsCaption"
-  ).textContent = `${view.profileDetail.tagline} ${state.searchTerm ? `Keyword filter: "${state.searchTerm}".` : ""}`;
+  document.getElementById("analyticsCaption").textContent = state.searchTerm
+    ? `Filtered by "${state.searchTerm}" in ${view.profileDetail.label}.`
+    : view.profileDetail.tagline;
+}
+
+function renderSelectedCreator(view) {
+  const target = document.getElementById("selectedCreatorSummary");
+  const breakdown = document.getElementById("scoreBreakdown");
+  const help = document.getElementById("scoreHelp");
+  const creator = view.universe.selected;
+
+  if (!creator) {
+    target.innerHTML = "<p class='detail-copy'>No creator selected.</p>";
+    breakdown.innerHTML = "";
+    help.hidden = !state.showScoreHelp;
+    return;
+  }
+
+  target.innerHTML = `
+    <strong style="display:block;font-size:1.05rem;overflow-wrap:anywhere;">${creator.username}</strong>
+    <p class="detail-copy" style="margin:8px 0 12px;">Atlas Score ${creator.atlasScore.toFixed(2)}</p>
+    <div class="industry-badges">
+      ${creator.content_style_tags.map((tag) => `<span class="industry-badge">${tag}</span>`).join("")}
+    </div>
+  `;
+
+  const items = [
+    { label: "Profile fit", value: creator.diagnostics.industryFit },
+    { label: "Query overlap", value: creator.diagnostics.queryOverlap },
+    { label: "Audience fit", value: creator.diagnostics.audienceFit },
+    { label: "Commercial", value: creator.diagnostics.commercialIndex },
+  ];
+
+  breakdown.innerHTML = items
+    .map(
+      (item) => `
+        <div class="score-row">
+          <div class="score-row-header">
+            <span>${item.label}</span>
+            <strong>${(item.value * 100).toFixed(1)}</strong>
+          </div>
+          <div class="score-bar"><span style="width:${item.value * 100}%"></span></div>
+        </div>
+      `
+    )
+    .join("");
+
+  help.hidden = !state.showScoreHelp;
 }
 
 function renderKpis(view) {
@@ -290,43 +338,17 @@ function renderKpis(view) {
 
   const scores = view.universe.all.map((creator) => creator.atlasScore).sort((a, b) => b - a);
   const topCreator = view.universe.top[0];
-  const totalTopTenGmv = view.universe.topTen.reduce(
-    (sum, creator) => sum + creator.metrics.total_gmv_30d,
-    0
-  );
-  const medianProjected = average(view.universe.all, (creator) => creator.projected_score);
   const p90 = percentile(scores, 0.1);
-  const avgEngagement = average(
-    view.universe.all,
-    (creator) => creator.metrics.engagement_rate
-  );
+  const totalTopTenGmv = view.universe.topTen.reduce((sum, creator) => sum + creator.metrics.total_gmv_30d, 0);
+  const avgProjected = average(view.universe.all, (creator) => creator.projected_score);
+  const avgEngagement = average(view.universe.all, (creator) => creator.metrics.engagement_rate);
 
   const cards = [
-    {
-      label: "Top candidate",
-      value: topCreator ? topCreator.username : "None",
-      copy: topCreator ? `${topCreator.atlasScore.toFixed(2)} atlas score` : "No creator matches the filters",
-    },
-    {
-      label: "P90 threshold",
-      value: p90.toFixed(2),
-      copy: "Top-decile score cutoff across the filtered universe",
-    },
-    {
-      label: "Top 10 GMV",
-      value: formatCurrency(totalTopTenGmv),
-      copy: "Combined 30-day GMV across the leading shortlist",
-    },
-    {
-      label: "Median projected",
-      value: medianProjected.toFixed(2),
-      copy: "Average projected score across the current universe slice",
-    },
-    {
-      label: "Avg engagement",
-      value: formatPercent(avgEngagement),
-      copy: "Mean engagement rate across the filtered universe",
-    },
+    { label: "Top candidate", value: topCreator?.username ?? "None", copy: topCreator ? `${topCreator.atlasScore.toFixed(2)} atlas score` : "No results" },
+    { label: "P90 threshold", value: p90.toFixed(2), copy: "Top-decile cutoff" },
+    { label: "Top 10 GMV", value: formatCurrency(totalTopTenGmv), copy: "Combined shortlist commerce" },
+    { label: "Avg projected", value: avgProjected.toFixed(2), copy: "Universe projected score" },
+    { label: "Avg engagement", value: formatPercent(avgEngagement), copy: "Universe engagement" },
   ];
 
   cards.forEach((card) => {
@@ -335,7 +357,7 @@ function renderKpis(view) {
     article.innerHTML = `
       <div class="kpi-label">${card.label}</div>
       <div class="kpi-value">${card.value}</div>
-      <p class="detail-copy">${card.copy}</p>
+      <div class="detail-copy">${card.copy}</div>
     `;
     container.appendChild(article);
   });
@@ -343,81 +365,101 @@ function renderKpis(view) {
 
 function renderScoreDistribution(view) {
   const container = document.getElementById("scoreDistribution");
-  const width = 700;
-  const height = 300;
-  const values = view.universe.all.map((creator) => creator.atlasScore).sort((a, b) => b - a);
+  const values = view.universe.all.map((creator) => creator.atlasScore);
 
   if (values.length === 0) {
     container.innerHTML = "<p class='detail-copy'>No data available.</p>";
     return;
   }
 
-  const points = values
-    .map((value, index) => {
-      const x = 30 + (index / Math.max(values.length - 1, 1)) * 620;
-      const y = 240 - (value / 100) * 180;
-      return `${x},${y}`;
-    })
-    .join(" ");
+  const width = 700;
+  const height = 240;
+  const margin = { top: 18, right: 18, bottom: 28, left: 42 };
+  const innerWidth = width - margin.left - margin.right;
+  const innerHeight = height - margin.top - margin.bottom;
+  const sorted = [...values].sort((a, b) => b - a);
+  const minValue = Math.min(...sorted);
+  const maxValue = Math.max(...sorted);
+  const paddedMin = Math.max(0, minValue - 4);
+  const paddedMax = Math.min(100, maxValue + 4);
+  const yScale = (value) =>
+    margin.top + innerHeight - ((value - paddedMin) / Math.max(paddedMax - paddedMin, 1)) * innerHeight;
+  const xScale = (index) =>
+    margin.left + (index / Math.max(sorted.length - 1, 1)) * innerWidth;
 
-  const topValue = values[0];
-  const medianValue = values[Math.floor(values.length / 2)];
-  const p90 = percentile(values, 0.1);
+  const points = sorted.map((value, index) => `${xScale(index)},${yScale(value)}`).join(" ");
+  const ticks = [paddedMin, (paddedMin + paddedMax) / 2, paddedMax];
 
   container.innerHTML = `
-    <svg class="chart-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Universe score ladder">
-      <line x1="30" y1="240" x2="670" y2="240" stroke="#d7dce5"></line>
-      <line x1="30" y1="60" x2="30" y2="240" stroke="#d7dce5"></line>
+    <svg class="chart-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Universe score curve">
+      <line x1="${margin.left}" y1="${margin.top + innerHeight}" x2="${width - margin.right}" y2="${margin.top + innerHeight}" stroke="#d6dce6"></line>
+      <line x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${margin.top + innerHeight}" stroke="#d6dce6"></line>
+      ${ticks
+        .map(
+          (tick) => `
+            <line x1="${margin.left}" y1="${yScale(tick)}" x2="${width - margin.right}" y2="${yScale(tick)}" stroke="#eef2f6"></line>
+            <text class="chart-label" x="0" y="${yScale(tick) + 4}">${tick.toFixed(0)}</text>
+          `
+        )
+        .join("")}
       <polyline fill="none" stroke="#0f2f7a" stroke-width="2.5" points="${points}"></polyline>
-      <text class="chart-label" x="30" y="26">Top ${topValue.toFixed(2)}</text>
-      <text class="chart-label" x="260" y="26">P90 ${p90.toFixed(2)}</text>
-      <text class="chart-label" x="520" y="26">Median ${medianValue.toFixed(2)}</text>
-      <text class="chart-label" x="30" y="260">Ranked creators</text>
-      <text class="chart-label" x="610" y="260">Lower score</text>
+      <text class="chart-label" x="${margin.left}" y="${height - 6}">Highest ranked</text>
+      <text class="chart-label" x="${width - margin.right - 68}" y="${height - 6}">Long tail</text>
     </svg>
   `;
 }
 
 function renderScatterPlot(view) {
   const container = document.getElementById("scatterPlot");
-  const width = 700;
-  const height = 300;
-  const maxFollowers = Math.max(
-    ...view.universe.all.map((creator) => creator.metrics.follower_count),
-    1
-  );
-  const maxGmv = Math.max(
-    ...view.universe.all.map((creator) => creator.metrics.total_gmv_30d),
-    1
-  );
-  const highlightIds = new Set(view.universe.top.slice(0, 5).map((creator) => creator.username));
+  const creators = view.universe.all;
 
-  const points = view.universe.all
+  if (creators.length === 0) {
+    container.innerHTML = "<p class='detail-copy'>No data available.</p>";
+    return;
+  }
+
+  const width = 700;
+  const height = 240;
+  const margin = { top: 16, right: 20, bottom: 30, left: 44 };
+  const innerWidth = width - margin.left - margin.right;
+  const innerHeight = height - margin.top - margin.bottom;
+  const maxFollowers = Math.max(...creators.map((creator) => creator.metrics.follower_count), 1);
+  const maxGmv = Math.max(...creators.map((creator) => creator.metrics.total_gmv_30d), 1);
+
+  const selected = view.universe.selected;
+  const topLabels = new Set(view.universe.top.slice(0, 3).map((creator) => creator.username));
+  if (selected) {
+    topLabels.add(selected.username);
+  }
+
+  const xScale = (value) => margin.left + normalizeLog(value, maxFollowers) * innerWidth;
+  const yScale = (value) => margin.top + innerHeight - normalizeLog(value, maxGmv) * innerHeight;
+
+  const circles = creators
     .map((creator) => {
-      const x = 50 + normalizeLog(creator.metrics.follower_count, maxFollowers) * 600;
-      const y = 235 - normalizeLog(creator.metrics.total_gmv_30d, maxGmv) * 175;
-      const fill = highlightIds.has(creator.username) ? "#0f2f7a" : "#a8b3c7";
-      const radius = highlightIds.has(creator.username) ? 5.4 : 3.1;
-      return `<circle cx="${x}" cy="${y}" r="${radius}" fill="${fill}" fill-opacity="0.9"></circle>`;
+      const isSelected = creator.username === state.selectedCreatorUsername;
+      const fill = isSelected ? "#0f2f7a" : "#98a2b3";
+      const radius = isSelected ? 5.5 : 3.2;
+      return `<circle cx="${xScale(creator.metrics.follower_count)}" cy="${yScale(creator.metrics.total_gmv_30d)}" r="${radius}" fill="${fill}" fill-opacity="${isSelected ? 1 : 0.7}"></circle>`;
     })
     .join("");
 
-  const labels = view.universe.top
-    .slice(0, 5)
+  const labels = creators
+    .filter((creator) => topLabels.has(creator.username))
     .map((creator) => {
-      const x = 50 + normalizeLog(creator.metrics.follower_count, maxFollowers) * 600;
-      const y = 235 - normalizeLog(creator.metrics.total_gmv_30d, maxGmv) * 175;
-      return `<text class="chart-label" x="${x + 8}" y="${y + 4}">${creator.username}</text>`;
+      const x = xScale(creator.metrics.follower_count);
+      const y = yScale(creator.metrics.total_gmv_30d);
+      return `<text class="chart-label" x="${Math.min(x + 8, width - 120)}" y="${Math.max(y - 8, 16)}">${creator.username}</text>`;
     })
     .join("");
 
   container.innerHTML = `
     <svg class="chart-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Reach versus GMV">
-      <line x1="50" y1="235" x2="660" y2="235" stroke="#d7dce5"></line>
-      <line x1="50" y1="40" x2="50" y2="235" stroke="#d7dce5"></line>
-      <text class="chart-label" x="540" y="262">Higher follower scale</text>
-      <text class="chart-label" x="16" y="52" transform="rotate(-90 16,52)">Higher 30D GMV</text>
-      ${points}
+      <line x1="${margin.left}" y1="${margin.top + innerHeight}" x2="${width - margin.right}" y2="${margin.top + innerHeight}" stroke="#d6dce6"></line>
+      <line x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${margin.top + innerHeight}" stroke="#d6dce6"></line>
+      <text class="chart-label" x="${width - 120}" y="${height - 6}">Higher reach</text>
+      <text class="chart-label" x="14" y="24" transform="rotate(-90 14,24)">Higher GMV</text>
+      ${circles}
       ${labels}
     </svg>
   `;
@@ -438,14 +480,14 @@ function renderIndustryMix(view) {
     .sort((left, right) => right[1] - left[1])
     .slice(0, 6)
     .forEach(([tag, count]) => {
-      const item = document.createElement("article");
-      item.className = "mix-item";
-      item.innerHTML = `
+      const article = document.createElement("article");
+      article.className = "mix-item";
+      article.innerHTML = `
         <strong>${tag}</strong>
-        <div class="bar"><span style="width: ${(count / view.universe.all.length) * 100}%"></span></div>
-        <p class="detail-copy">${count} creators in the active universe slice</p>
+        <div class="bar"><span style="width:${(count / view.universe.all.length) * 100}%"></span></div>
+        <div class="detail-copy">${count} creators</div>
       `;
-      container.appendChild(item);
+      container.appendChild(article);
     });
 }
 
@@ -453,37 +495,16 @@ function renderSummaryRail(view) {
   const container = document.getElementById("summaryRail");
   container.innerHTML = "";
 
-  const topGmv = [...view.universe.top].sort(
-    (left, right) => right.metrics.total_gmv_30d - left.metrics.total_gmv_30d
-  )[0];
-  const topEngagement = [...view.universe.top].sort(
-    (left, right) => right.metrics.engagement_rate - left.metrics.engagement_rate
-  )[0];
-  const topEfficiency = [...view.universe.top].sort(
-    (left, right) => right.diagnostics.efficiencyIndex - left.diagnostics.efficiencyIndex
-  )[0];
-  const concentration = average(
-    view.universe.topTen,
-    (creator) => creator.diagnostics.industryFit
-  );
+  const topGmv = [...view.universe.top].sort((a, b) => b.metrics.total_gmv_30d - a.metrics.total_gmv_30d)[0];
+  const topEngagement = [...view.universe.top].sort((a, b) => b.metrics.engagement_rate - a.metrics.engagement_rate)[0];
+  const bestFit = [...view.universe.top].sort((a, b) => b.diagnostics.industryFit - a.diagnostics.industryFit)[0];
+  const avgAtlas = average(view.universe.topTen, (creator) => creator.atlasScore);
 
   const items = [
-    {
-      title: "Top GMV leader",
-      copy: topGmv ? `${topGmv.username} at ${formatCurrency(topGmv.metrics.total_gmv_30d)}` : "No result",
-    },
-    {
-      title: "Top engagement",
-      copy: topEngagement ? `${topEngagement.username} at ${formatPercent(topEngagement.metrics.engagement_rate)}` : "No result",
-    },
-    {
-      title: "Top efficiency",
-      copy: topEfficiency ? `${topEfficiency.username} at ${topEfficiency.diagnostics.efficiencyIndex.toFixed(2)}` : "No result",
-    },
-    {
-      title: "Category concentration",
-      copy: `${(concentration * 100).toFixed(1)}% average industry alignment across the top 10`,
-    },
+    { title: "Best profile fit", copy: bestFit ? `${bestFit.username} at ${(bestFit.diagnostics.industryFit * 100).toFixed(1)}` : "No result" },
+    { title: "GMV leader", copy: topGmv ? `${topGmv.username} at ${formatCurrency(topGmv.metrics.total_gmv_30d)}` : "No result" },
+    { title: "Engagement leader", copy: topEngagement ? `${topEngagement.username} at ${formatPercent(topEngagement.metrics.engagement_rate)}` : "No result" },
+    { title: "Top-10 average", copy: `${avgAtlas.toFixed(2)} atlas score` },
   ];
 
   items.forEach((item) => {
@@ -491,7 +512,7 @@ function renderSummaryRail(view) {
     article.className = "summary-item";
     article.innerHTML = `
       <strong>${item.title}</strong>
-      <p class="detail-copy">${item.copy}</p>
+      <div class="detail-copy">${item.copy}</div>
     `;
     container.appendChild(article);
   });
@@ -503,6 +524,7 @@ function renderLeaderboard(view) {
 
   view.universe.top.forEach((creator, index) => {
     const row = document.createElement("tr");
+    row.className = creator.username === state.selectedCreatorUsername ? "active" : "";
     row.innerHTML = `
       <td>${index + 1}</td>
       <td class="rank-cell">
@@ -520,6 +542,10 @@ function renderLeaderboard(view) {
       <td>${formatCompactNumber(creator.metrics.avg_views_30d)}</td>
       <td>${formatPercent(creator.metrics.engagement_rate)}</td>
     `;
+    row.addEventListener("click", () => {
+      state.selectedCreatorUsername = creator.username;
+      render();
+    });
     tbody.appendChild(row);
   });
 }
@@ -532,51 +558,44 @@ function quizLabel(questionId, value) {
   );
 }
 
-function advisorScore(creator, answers, profileDetail) {
+function advisorScore(creator, answers) {
   let score = creator.atlasScore;
 
   if (answers.objective === "sales") {
-    score += creator.diagnostics.gmvNorm * 20 + normalizeProjected(creator.projected_score) * 18;
+    score += creator.diagnostics.commercialIndex * 24;
   } else if (answers.objective === "loyalty") {
-    score += creator.diagnostics.semanticProxy * 22 + creator.diagnostics.industryFit * 14;
+    score += creator.diagnostics.semanticProxy * 22;
   } else if (answers.objective === "awareness") {
-    score += creator.diagnostics.followersNorm * 18 + creator.diagnostics.viewsNorm * 16;
+    score += creator.diagnostics.followersNorm * 18 + creator.diagnostics.viewsNorm * 14;
   }
 
-  if (answers.voice === "technical") {
-    if (
-      creator.content_style_tags.includes("Phones & Electronics") ||
-      creator.content_style_tags.includes("Computer & Office Equipment") ||
-      creator.content_style_tags.includes("Tools & Hardware")
-    ) {
-      score += 16;
-    }
-  } else if (answers.voice === "lifestyle") {
-    if (
-      creator.content_style_tags.includes("Home") ||
-      creator.content_style_tags.includes("Food & Beverage") ||
-      creator.content_style_tags.includes("Beauty") ||
-      creator.content_style_tags.includes("Fashion")
-    ) {
-      score += 16;
-    }
-  } else if (answers.voice === "trend") {
-    score += clamp(creator.metrics.engagement_rate / 0.12) * 12;
-    if (
-      creator.content_style_tags.includes("Fashion") ||
-      creator.content_style_tags.includes("Beauty") ||
-      creator.content_style_tags.includes("Phones & Electronics")
-    ) {
-      score += 14;
-    }
+  if (answers.voice === "technical" && (
+    creator.content_style_tags.includes("Phones & Electronics") ||
+    creator.content_style_tags.includes("Computer & Office Equipment") ||
+    creator.content_style_tags.includes("Tools & Hardware")
+  )) {
+    score += 16;
+  }
+
+  if (answers.voice === "lifestyle" && (
+    creator.content_style_tags.includes("Home") ||
+    creator.content_style_tags.includes("Beauty") ||
+    creator.content_style_tags.includes("Food & Beverage") ||
+    creator.content_style_tags.includes("Fashion")
+  )) {
+    score += 16;
+  }
+
+  if (answers.voice === "trend") {
+    score += creator.metrics.engagement_rate / 0.12 * 14;
   }
 
   if (answers.rollout === "broad") {
     score += creator.diagnostics.followersNorm * 16;
   } else if (answers.rollout === "balanced") {
-    score += creator.diagnostics.commercialIndex * 14;
+    score += creator.diagnostics.commercialIndex * 12;
   } else if (answers.rollout === "niche") {
-    score += creator.diagnostics.efficiencyIndex * 18;
+    score += creator.diagnostics.audienceFit * 16;
   }
 
   return score;
@@ -590,14 +609,14 @@ function renderAdvisor(view) {
     quizMount.innerHTML = `
       <div class="panel-label">Walkthrough</div>
       <h3>Would you like to take a quiz?</h3>
-      <p class="quiz-copy">Answer three multiple-choice questions and Atlas Advisor will recommend a campaign posture for ${view.profileDetail.label.toLowerCase()}.</p>
-      <button class="quiz-button primary" id="startQuizButton" type="button">Start the quiz</button>
+      <p class="detail-copy">Answer three quick prompts to turn the current screen into a campaign plan.</p>
+      <button class="quiz-button primary" id="startQuizButton" type="button">Start</button>
     `;
 
     advisorOutput.innerHTML = `
-      <div class="panel-label">Advisor preview</div>
-      <h3>What you will get</h3>
-      <p class="advice-copy">A recommendation set, campaign posture, and creator stack tuned to the selected profile and your stated objective.</p>
+      <div class="panel-label">Output</div>
+      <h3>Campaign recommendation</h3>
+      <p class="detail-copy">The recommendation set will appear here once the quiz is complete.</p>
     `;
 
     document.getElementById("startQuizButton").addEventListener("click", () => {
@@ -626,7 +645,7 @@ function renderAdvisor(view) {
         )
         .join("")}
     </div>
-    <div style="margin-top:16px">
+    <div style="margin-top:12px">
       <button class="quiz-button secondary" id="resetQuizButton" type="button">Reset</button>
     </div>
   `;
@@ -649,31 +668,27 @@ function renderAdvisor(view) {
   });
 
   if (Object.keys(state.quizAnswers).length === quizQuestions.length) {
-    const ranked = [...view.universe.top]
-      .map((creator) => ({
-        creator,
-        advisorScore: advisorScore(creator, state.quizAnswers, view.profileDetail),
-      }))
-      .sort((left, right) => right.advisorScore - left.advisorScore)
+    const picks = [...view.universe.top]
+      .map((creator) => ({ creator, score: advisorScore(creator, state.quizAnswers) }))
+      .sort((a, b) => b.score - a.score)
       .slice(0, 3)
       .map((entry) => entry.creator);
 
     advisorOutput.innerHTML = `
-      <div class="panel-label">Advisor recommendation</div>
+      <div class="panel-label">Output</div>
       <h3>${view.profileDetail.label}: ${quizLabel("objective", state.quizAnswers.objective)}</h3>
-      <p class="advice-copy">For a ${view.profileDetail.label.toLowerCase()} campaign with a ${quizLabel("voice", state.quizAnswers.voice).toLowerCase()} creative posture and a ${quizLabel("rollout", state.quizAnswers.rollout).toLowerCase()}, prioritize creators who score well on both business efficiency and profile fit.</p>
       <div class="advisor-badges">
         <span class="advisor-badge">${quizLabel("objective", state.quizAnswers.objective)}</span>
         <span class="advisor-badge">${quizLabel("voice", state.quizAnswers.voice)}</span>
         <span class="advisor-badge">${quizLabel("rollout", state.quizAnswers.rollout)}</span>
       </div>
       <div class="advisor-list">
-        ${ranked
+        ${picks
           .map(
             (creator, index) => `
               <article class="advisor-pick">
                 <strong>${index + 1}. ${creator.username}</strong>
-                <p class="detail-copy">${creator.bio}</p>
+                <div class="detail-copy">${creator.bio}</div>
               </article>
             `
           )
@@ -682,9 +697,9 @@ function renderAdvisor(view) {
     `;
   } else {
     advisorOutput.innerHTML = `
-      <div class="panel-label">Advisor recommendation</div>
+      <div class="panel-label">Output</div>
       <h3>Waiting for inputs</h3>
-      <p class="advice-copy">Complete the quiz to generate a recommendation set.</p>
+      <div class="detail-copy">Complete the quiz to generate a recommendation.</div>
     `;
   }
 }
@@ -707,12 +722,18 @@ function attachEvents() {
     state.searchTerm = event.target.value;
     render();
   });
+
+  document.getElementById("toggleScoreHelp").addEventListener("click", () => {
+    state.showScoreHelp = !state.showScoreHelp;
+    render();
+  });
 }
 
 function render() {
-  renderControls();
   const view = getCurrentView();
-  renderHeader(view);
+  renderControls(view);
+  renderMeta(view);
+  renderSelectedCreator(view);
   renderKpis(view);
   renderScoreDistribution(view);
   renderScatterPlot(view);
@@ -735,9 +756,9 @@ async function init() {
   } catch (error) {
     document.body.innerHTML = `
       <main class="app-shell">
-        <section class="section">
+        <section class="rail-card">
           <h1>Dashboard unavailable</h1>
-          <p class="hero-text">${error instanceof Error ? error.message : "Unknown loading error"}</p>
+          <p class="detail-copy">${error instanceof Error ? error.message : "Unknown loading error"}</p>
         </section>
       </main>
     `;
