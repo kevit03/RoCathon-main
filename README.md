@@ -9,8 +9,6 @@ Atlas Brief is a hybrid creator-screening system built for the RoC challenge. It
 
 Instead of dropping reviewers straight into a dashboard, Atlas now opens with a product-style walkthrough that explains what the system is, what terms like `GMV` mean, and how the scoring works before users enter the live demo.
 
-![Atlas hero](dashboard/atlas-hero.svg)
-
 ## Product Flow
 
 Atlas Brief is now split into three surfaces:
